@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light">
+  <title>簡易日曆筆記 v10.0（筆記功能整合版）</title>
+  <style>
+  :root{
+    --bg:#ffffff; --fg:#111111; --muted:#6b7280;
+    --primary:#2563eb; --danger:#dc2626; --border:#e5e7eb;
+    --selected:#f1f5f9; --surface:#f9fafb;
+    --amount:#3b82f6; /* 藍色收支點/淨額顏色 */
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; -webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC","PingFang TC","Heiti TC","Microsoft JhengHei",Arial,sans-serif;
+    color:var(--fg); background:var(--bg);
+  }
+  .topbar{
+    position:sticky; top:0; z-index:5;
+    display:flex; align-items:center; gap:1rem;
+    padding:.75rem 1rem; border-bottom:1px solid var(--border);
+    background:rgba(255,255,255,.9); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+  }
+  .topbar h1{margin:0; font-size:1.1rem}
+  .spacer{flex:1}
+  button{border:1px solid var(--border); background:#fff; padding:.45rem .7rem; border-radius:.5rem; cursor:pointer}
+  button.ghost{background:transparent}
+  main.stack{
+    display:grid; grid-template-rows:1fr 1fr;
+    gap:0;
+    max-width:1000px; margin:0 auto; padding:1rem;
+    min-height:calc(100vh - 120px);
+  }
+  #calendarPane, #notePane{display:flex; flex-direction:column; min-height:0; overflow:auto}
+  .cal-header{display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:.5rem; margin:0;}
+  #monthLabel{text-align:center; margin:.25rem 0; font-weight:700}
+  .weekday-row, .grid{display:grid; grid-template-columns:repeat(7,1fr); gap:.25rem; margin:0;}
+  .weekday-row div{ text-align:center; padding:.25rem 0; color:var(--muted); font-size:.9rem; font-weight:600}
+  .grid{padding-bottom:0;}
+  .grid .cell{
+    border:1px solid var(--border); min-height:112px; border-radius:.5rem; padding:.5rem;
+    display:flex; flex-direction:column; gap:.2rem; background:#fff; cursor:pointer; position:relative; color:var(--fg);
+    transition:background-color .15s;
+  }
+  .grid .cell.selected{ background:var(--selected) }
+  .grid .cell.today{ outline:2px solid var(--primary); outline-offset:1px }
+  .grid .cell header{ display:flex; justify-content:space-between; align-items:flex-start; color:var(--fg) }
+  .day-num{ font-weight:800; line-height:1; position:relative; padding-right:20px }
+  .note-dot{ position:absolute; right:0; top:0; width:8px; height:8px; border-radius:50%; background:var(--danger); }
+  .amount-dot{ 
+    position:absolute; right:10px; top:0; width:8px; height:8px; border-radius:50%; background:var(--amount);
+  }
+  .preview{ margin-top:.1rem; font-size:.82rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tools{ display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; padding:.25rem 0 .25rem 0; margin-top:.1cm }
+  .tool-group{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap }
+  #textNote{
+    width:100%; margin-top:.3cm; min-height:22.5vh; resize:vertical;
+    padding:.75rem; border:1px solid var(--border); border-radius:.5rem; font-size:1rem; line-height:1.6;
+  }
+  /* Popover */
+  .popover{
+    position:absolute; z-index:10; background:#fff; border:1px solid var(--border); border-radius:.6rem;
+    box-shadow:0 8px 24px rgba(0,0,0,.08); padding:.6rem; width:min(560px, 94vw);
+  }
+  .row{ display:flex; gap:.4rem; align-items:center; margin:.35rem 0; flex-wrap:wrap }
+  .muted{ color:var(--muted); font-size:.86rem }
+  .chips{ display:flex; gap:.35rem; flex-wrap:wrap }
+  .chip{ display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--border); background:var(--surface); border-radius:999px; padding:.2rem .55rem; font-size:.86rem }
+  .chip button{ border:none; background:transparent; cursor:pointer; padding:0 .2rem }
+  .sectionTitle{ font-weight:700; font-size:.9rem; color:#111; }
+  @media print{
+    body{ background:#fff }
+    .topbar, #calendarPane, .popover{ display:none !important }
+    #notePane{ padding:0; }
+  }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1>簡易日曆筆記 v10.0</h1>
+    <div class="spacer"></div>
+    <button id="installBtn" class="ghost" title="加入主畫面（可選）">加入主畫面</button>
+  </header>
+
+  <main class="stack">
+    <section id="calendarPane" aria-labelledby="monthLabel">
+      <div class="cal-header">
+        <button id="prevMonth" aria-label="前一個月">◀</button>
+        <h2 id="monthLabel"></h2>
+        <button id="nextMonth" aria-label="下一個月">▶</button>
+      </div>
+      <div class="weekday-row">
+        <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+      </div>
+      <div id="grid" class="grid" role="grid" aria-label="月曆"></div>
+    </section>
+
+    <section id="notePane">
+      <div class="tools">
+        <div class="tool-group">
+          <button id="exportPdf" title="將本日筆記匯出為 PDF（以列印方式）">🖨️ 匯出 PDF</button>
+          <button id="openPlan" title="批次加入多日期活動">每週活動安排</button>
+          <button id="openReport" title="顯示每週和每月收支統計">收支報表</button>
+          <button id="openMyNotes" title="開啟我的筆記功能">📝 我的筆記</button>
+        </div>
+      </div>
+
+      <textarea id="textNote" aria-label="文字筆記"></textarea>
+      <div id="accountingDetails" style="margin-top:1rem; padding:.75rem; border:1px solid var(--border); border-radius:.5rem; display:none"></div>
+      <div id="planPop" class="popover" style="display:none"></div>
+      <div id="reportPop" class="popover" style="display:none; width:min(700px, 98vw)"></div>
+      <div id="myNotesPop" class="popover" style="display:none; width:min(800px, 98vw); max-height:90vh; overflow-y:auto"></div>
+    </section>
+  </main>
+
+  <script>
+
+    // ===== 唐詩五言絕句資料庫 =====
+    var tangPoems = [
+      { title: '靜夜思', author: '李白', content: '床前明月光，疑是地上霜。舉頭望明月，低頭思故鄉。' },
+      { title: '登鸛雀樓', author: '王之渙', content: '白日依山盡，黃河入海流。欲窮千里目，更上一層樓。' },
+      { title: '春曉', author: '孟浩然', content: '春眠不覺曉，處處聞啼鳥。夜來風雨聲，花落知多少。' },
+      { title: '鹿柴', author: '王維', content: '空山不見人，但聞人語響。返景入深林，復照青苔上。' },
+      { title: '相思', author: '王維', content: '紅豆生南國，春來發幾枝。願君多採擷，此物最相思。' },
+      { title: '雜詩', author: '王維', content: '君自故鄉來，應知故鄉事。來日綺窗前，寒梅著花未。' },
+      { title: '送別', author: '王維', content: '山中相送罷，日暮掩柴扉。春草明年綠，王孫歸不歸。' },
+      { title: '竹里館', author: '王維', content: '獨坐幽篁裡，彈琴復長嘯。深林人不知，明月來相照。' },
+      { title: '宿建德江', author: '孟浩然', content: '移舟泊煙渚，日暮客愁新。野曠天低樹，江清月近人。' },
+      { title: '春怨', author: '金昌緒', content: '打起黃鶯兒，莫教枝上啼。啼時驚妾夢，不得到遼西。' },
+      { title: '江雪', author: '柳宗元', content: '千山鳥飛絕，萬徑人蹤滅。孤舟蓑笠翁，獨釣寒江雪。' },
+      { title: '尋隱者不遇', author: '賈島', content: '松下問童子，言師採藥去。只在此山中，雲深不知處。' },
+      { title: '登樂遊原', author: '李商隱', content: '向晚意不適，驅車登古原。夕陽無限好，只是近黃昏。' },
+      { title: '聽箏', author: '李端', content: '鳴箏金粟柱，素手玉房前。欲得周郎顧，時時誤拂弦。' },
+      { title: '新嫁娘', author: '王建', content: '三日入廚下，洗手作羹湯。未諳姑食性，先遣小姑嘗。' },
+      { title: '江上漁者', author: '范仲淹', content: '江上往來人，但愛鱸魚美。君看一葉舟，出沒風波裡。' },
+      { title: '夜宿山寺', author: '李白', content: '危樓高百尺，手可摘星辰。不敢高聲語，恐驚天上人。' },
+      { title: '秋夜寄邱員外', author: '韋應物', content: '懷君屬秋夜，散步詠涼天。空山松子落，幽人應未眠。' },
+      { title: '問劉十九', author: '白居易', content: '綠蟻新醅酒，紅泥小火爐。晚來天欲雪，能飲一杯無。' },
+      { title: '八陣圖', author: '杜甫', content: '功蓋三分國，名成八陣圖。江流石不轉，遺恨失吞吳。' }
+    ];
+
+    // 隨機選擇一首唐詩
+    function getRandomPoem() {
+      var index = Math.floor(Math.random() * tangPoems.length);
+      return tangPoems[index];
+    }
+
+    // 插入唐詩到文字欄第一排
+    function insertPoem() {
+      var poem = getRandomPoem();
+      var poemText = poem.content + ' —— ' + poem.author + '《' + poem.title + '》';
+      var currentText = textNote.value;
+      if (currentText) {
+        textNote.value = poemText + '\n' + currentText;
+      } else {
+        textNote.value = poemText;
+      }
+      autoSave();
+    }
+
+  (function(){
+    var grid = document.getElementById('grid');
+    var monthLabel = document.getElementById('monthLabel');
+    var prevMonth = document.getElementById('prevMonth');
+    var nextMonth = document.getElementById('nextMonth');
+    var textNote = document.getElementById('textNote');
+    var installBtn = document.getElementById('installBtn');
+    var exportBtn = document.getElementById('exportPdf');
+    var openPlanBtn = document.getElementById('openPlan');
+    var planPop = document.getElementById('planPop');
+    var openReportBtn = document.getElementById('openReport');
+    var reportPop = document.getElementById('reportPop');
+    var accountingDetailsDiv = document.getElementById('accountingDetails');
+
+    var state = { y:new Date().getFullYear(), m:new Date().getMonth(), currentISO:null, selectedCell:null };
+
+    // ===== Helpers =====
+    function pad2(n){ return String(n).padStart(2,'0'); }
+    function isoOf(y,m,d){ return y + '-' + pad2(m+1) + '-' + pad2(d); }
+    function isoFromDate(d){ return isoOf(d.getFullYear(), d.getMonth(), d.getDate()); }
+    function loadNote(iso){ try { return JSON.parse(localStorage.getItem('note:' + iso) || 'null') || {text:''}; } catch(e){ return {text:''}; } }
+    function saveNote(iso, obj){ localStorage.setItem('note:' + iso, JSON.stringify(obj)); }
+    function setIndex(iso, hasContent){
+      var idx = {}; try { idx = JSON.parse(localStorage.getItem('noteIndex')||'{}') || {}; } catch(e){ idx={}; }
+      if (hasContent) idx[iso] = 1; else delete idx[iso];
+      localStorage.setItem('noteIndex', JSON.stringify(idx));
+    }
+    
+    function loadAmounts(iso){ try { return JSON.parse(localStorage.getItem('amounts:' + iso) || 'null') || {income:0, expense:0}; } catch(e){ return {income:0, expense:0}; } }
+
+    function setAmountIndex(iso, hasContent){
+      var idx = {}; try { idx = JSON.parse(localStorage.getItem('amountIndex')||'{}') || {}; } catch(e){ idx={}; }
+      if (hasContent) idx[iso] = 1; else delete idx[iso];
+      localStorage.setItem('amountIndex', JSON.stringify(idx));
+    }
+    
+    // 從文本中解析收支金額
+    function parseAmounts(text){
+      var lines = text.split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean);
+      var income = 0, expense = 0;
+      var normText;
+
+      for (var i=0;i<lines.length;i++){
+        normText = normalizeFW(lines[i]);
+        
+        // 1. 匹配收入關鍵字: 「中獎」、「獎金」、「收入」等
+        var incKeywordMatch = normText.match(/(?:中獎|獎金|薪水|薪資|紅包|利息|收入|income)[^\d]*(\d+)(?:\s*(?:元|塊))?/i);
+        if (incKeywordMatch){
+          var num = parseFloat(incKeywordMatch[1].replace(/,/g, ''));
+          if (!isNaN(num)) income += num;
+          continue;
+        }
+        
+        // 2. 匹配收入格式: 「+1000」或「數字+收入」
+        var incMatch = normText.match(/(?:^|\s)\+(\d+)(?:\s*(?:元|塊))?(?:\s|$)/i);
+        if (incMatch){
+          var num = parseFloat(incMatch[1].replace(/,/g, ''));
+          if (!isNaN(num)) income += num;
+          continue;
+        }
+
+        // 3. 匹配支出: 「-500」或「支出500」
+        var expMatch = normText.match(/(?:^|\s)-(\d+)(?:\s*(?:元|塊|支出|ex))?|(\d+)(?:\s*(?:元|塊|支出|ex))(?:\s|$)/i);
+        if (expMatch){
+            var numStr = expMatch[1] || expMatch[2]; // 取匹配到的第一個數字
+            var num = parseFloat(numStr.replace(/,/g, ''));
+            if (!isNaN(num)) expense += num;
+        }
+      }
+      return { income: parseFloat(income.toFixed(2)), expense: parseFloat(expense.toFixed(2)) };
+    }
+
+    
+    
+    // ===== 記帳功能 =====
+    function loadAccounting(iso){
+      try {
+        return JSON.parse(localStorage.getItem('accounting:' + iso) || 'null') || [];
+      } catch(e){
+        return [];
+      }
+    }
+    
+    function saveAccounting(iso, entries){
+      if (entries.length > 0){
+        localStorage.setItem('accounting:' + iso, JSON.stringify(entries));
+      } else {
+        localStorage.removeItem('accounting:' + iso);
+      }
+    }
+    
+    function parseAccounting(text){
+      var lines = text.split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean);
+      var entries = [];
+      
+      for (var i=0; i<lines.length; i++){
+        var line = lines[i];
+        
+        // 匹配：買XXX N元、XXX N元、買XXX $N
+        var match = line.match(/(?:買|購買)?(.+?)(\d+)(?:元|\$)/);
+        if (match){
+          var name = match[1].trim();
+          var amount = parseFloat(match[2]);
+          
+          if (name && !isNaN(amount) && amount > 0){
+            // 排除收支格式（+1000、-500、收入、支出）
+            if (!/^[\+\-]/.test(name) && !/收入|支出|in|ex/i.test(name)){
+              entries.push({
+                name: name,
+                amount: amount,
+                timestamp: Date.now()
+              });
+            }
+          }
+        }
+      }
+      
+      return entries;
+    }
+    
+    function renderAccountingDetails(){
+      if (!state.currentISO || !accountingDetailsDiv) return;
+      
+      var entries = loadAccounting(state.currentISO);
+      
+      if (entries.length === 0){
+        accountingDetailsDiv.style.display = 'none';
+        return;
+      }
+      
+      accountingDetailsDiv.style.display = 'block';
+      
+      var total = 0;
+      var html = '<div class="sectionTitle">📝 當日記帳明細</div>';
+      html += '<div class="chips" style="margin-top:.5rem">';
+      
+      entries.forEach(function(entry, index){
+        total += entry.amount;
+        html += '<div class="chip">';
+        html += entry.name + ' $' + entry.amount.toFixed(0);
+        html += '<button data-index="' + index + '">×</button>';
+        html += '</div>';
+      });
+      
+      html += '</div>';
+      html += '<div class="row" style="margin-top:.5rem"><span class="sectionTitle">總計：$' + total.toFixed(0) + '</span></div>';
+      
+      accountingDetailsDiv.innerHTML = html;
+      
+      // 綁定刪除事件
+      accountingDetailsDiv.querySelectorAll('button[data-index]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var index = parseInt(btn.dataset.index);
+          entries.splice(index, 1);
+          saveAccounting(state.currentISO, entries);
+          renderAccountingDetails();
+          renderCalendar();
+        });
+      });
+    }
+    
+    function addDays(dt, n){ var d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()); d.setDate(d.getDate()+n); return d; }
+
+    // 計算日期範圍的總收支
+    function calculateSummary(start, end){
+      var totalIncome = 0;
+      var totalExpense = 0;
+      
+      var cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      var endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate()); // 確保是日期對象
+
+      while (cur <= endDate){
+        var iso = isoFromDate(cur);
+        var amounts = loadAmounts(iso);
+        totalIncome += amounts.income;
+        totalExpense += amounts.expense;
+        cur.setDate(cur.getDate() + 1);
+      }
+      
+      return { income: parseFloat(totalIncome.toFixed(2)), expense: parseFloat(totalExpense.toFixed(2)) };
+    }
+    
+    // 使用新 helper 計算月度總收支
+    function getMonthSummary(y, m){
+      var firstDay = new Date(y, m, 1);
+      var lastDay = new Date(y, m + 1, 0);
+      return calculateSummary(firstDay, lastDay);
+    }
+    
+    // ===== IME guard & Debounced routing =====
+    var isComposing = false;
+    textNote.addEventListener('compositionstart', function(){ isComposing = true; });
+    textNote.addEventListener('compositionupdate', function(){ isComposing = true; });
+    textNote.addEventListener('compositionend', function(){ isComposing = false; scheduleRoute(300); });
+
+    var tDebounce=null;
+    function scheduleRoute(wait){
+      if (typeof wait !== 'number') wait = 700;
+      clearTimeout(tDebounce);
+      tDebounce = setTimeout(function(){
+        if (isComposing) return;
+        copyAndSave(textNote.value || '');
+      }, wait);
+    }
+
+    function copyAndSave(fullText){
+      copyDatedClauses(fullText);
+      var text = (textNote.value || '').trim();
+      
+      var amounts = parseAmounts(text);
+      var accounting = parseAccounting(text);
+      
+      if (!text && amounts.income === 0 && amounts.expense === 0){ 
+        localStorage.removeItem('note:' + state.currentISO);
+        localStorage.removeItem('amounts:' + state.currentISO); 
+        setIndex(state.currentISO, false);
+        setAmountIndex(state.currentISO, false);
+      } else {
+        saveNote(state.currentISO, { text:text });
+        setIndex(state.currentISO, true);
+        
+        if (amounts.income > 0 || amounts.expense > 0) {
+          localStorage.setItem('amounts:' + state.currentISO, JSON.stringify(amounts));
+          setAmountIndex(state.currentISO, true);
+        } else {
+          localStorage.removeItem('amounts:' + state.currentISO);
+          setAmountIndex(state.currentISO, false);
+        }
+      }
+      
+      saveAccounting(state.currentISO, accounting);
+      renderCalendar();
+      renderAccountingDetails();
+    }
+    // ... (end of copyAndSave and utility functions) ...
+
+    // ===== Parsing & normalization (保持不變) =====
+    function splitClauses(text){
+      var parts = text.split(/\n|。|；|;|\r/g);
+      var out = [];
+      for (var i=0;i<parts.length;i++){
+        var xs = parts[i].split(/，/g);
+        for (var j=0;j<xs.length;j++){
+          var z = xs[j].trim();
+          if (z) out.push(z);
+        }
+      }
+      return out;
+    }
+    function normalizeFW(s){
+      var fwDigits = '０１２３４５６７８９';
+      var out = '';
+      for (var i=0;i<s.length;i++){
+        var ch = s[i];
+        var idx = fwDigits.indexOf(ch);
+        if (idx >= 0) out += String(idx);
+        else if (ch === '：') out += ':';
+        else if (ch === '／') out += '/';
+        else if (ch === '－') out += '-';
+        else if (ch === '．') out += '.';
+        else out += ch;
+      }
+      return out;
+    }
+    var WEEKMAP = {'日':0,'天':0,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6};
+    function setWeek(dt, targetDow, nextWeek){
+      var cur = dt.getDay();
+      var diff = targetDow - cur;
+      if (nextWeek){ diff += (diff<=0 ? 7 : 7); }
+      else { if (diff<0) diff += 7; }
+      return addDays(dt, diff);
+    }
+    function nextMonthDate(dt, day){
+      var y = dt.getFullYear(), m = dt.getMonth();
+      var d = new Date(y, m+1, day);
+      return d;
+    }
+
+    function parseDateInfo(raw, now){
+      var s = normalizeFW(raw).trim();
+      if (!s) return null;
+      if (/^(今天|今日)(.*)$/.test(s)) { var t=s.match(/^(今天|今日)(.*)$/); return { iso: isoFromDate(now), tail:(t[2]||'').trim() }; }
+      if (/^(明天|翌日|隔天)(.*)$/.test(s)) { var t=s.match(/^(明天|翌日|隔天)(.*)$/); var d=addDays(now,1); return { iso: isoFromDate(d), tail:(t[2]||'').trim() }; }
+      if (/^(後天)(.*)$/.test(s)) { var t=s.match(/^(後天)(.*)$/); var d2=addDays(now,2); return { iso: isoFromDate(d2), tail:(t[2]||'').trim() }; }
+      var m1 = s.match(/^(20\d{2})[\/\-.](\d{1,2})[\/\-.](\d{1,2})(.*)$/);
+      if (m1){ var y=parseInt(m1[1]), mo=parseInt(m1[2]), d=parseInt(m1[3]); if (mo>=1&&mo<=12&&d>=1&&d<=31) return { iso: isoOf(y, mo-1, d), tail:(m1[4]||'').trim() }; }
+      var m2 = s.match(/^(\d{1,2})[\/\-.](\d{1,2})(.*)$/);
+      if (m2){ var mo2=parseInt(m2[1]), d2=parseInt(m2[2]); if (mo2>=1&&mo2<=12&&d2>=1&&d2<=31) return { iso: isoOf(now.getFullYear(), mo2-1, d2), tail:(m2[3]||'').trim() }; }
+      var m3 = s.match(/^(\d{1,2})月(\d{1,2})[日號](.*)$/);
+      if (m3){ var mo3=parseInt(m3[1]), d3=parseInt(m3[2]); if (mo3>=1&&d3>=1&&mo3<=12&&d3<=31) return { iso: isoOf(now.getFullYear(), mo3-1, d3), tail:(m3[3]||'').trim() }; }
+      var m4 = s.match(/^(\d{1,2})[日號](.*)$/);
+      if (m4){ var d4=parseInt(m4[1]); if (d4>=1&&d4<=31) return { iso: isoOf(now.getFullYear(), now.getMonth(), d4), tail:(m4[2]||'').trim() }; }
+      var m5 = s.match(/^(下個?月|下月)(\d{1,2})[日號](.*)$/);
+      if (m5){ var d5=parseInt(m5[2]); var nd = nextMonthDate(now, d5); return { iso: isoFromDate(nd), tail:(m5[3]||'').trim() }; }
+      var m6 = s.match(/^(本週|這週|這周|下週|下周)?(週|星期|禮拜)([日天一二三四五六])(.*)$/);
+      if (m6){
+        var scope = m6[1]||''; var dowC = m6[3]; var rest = (m6[4]||'').trim();
+        var targetDow = WEEKMAP[dowC];
+        var dbase = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        var target = setWeek(dbase, targetDow, /下週|下周/.test(scope));
+        return { iso: isoFromDate(target), tail: rest };
+      }
+      return null;
+    }
+
+    function parseTimeFrom(s){
+      var t = s.trim();
+      var r;
+      r = t.match(/(上午|早上|清晨|下午|中午|晚上|AM|PM)?\s*(\d{1,2})[:：](\d{1,2})/i);
+      if (r){
+        var ap = r[1] ? r[1].toLowerCase() : '';
+        var h = parseInt(r[2],10), m = parseInt(r[3],10);
+        if (h<=24 && m<=59){
+          var mins = adjustAmPm(h,m,ap);
+          var norm = pad2(Math.floor(mins/60))+':'+pad2(mins%60);
+          var rest = t.replace(r[0],'').trim();
+          return { minutes: mins, norm: norm, rest: rest };
+        }
+      }
+      r = t.match(/(上午|早上|清晨|下午|中午|晚上)?\s*(\d{1,2})點(\d{1,2})?分?/);
+      if (r){
+        var ap2 = r[1] ? r[1].toLowerCase() : '';
+        var h2 = parseInt(r[2],10), m2 = r[3]?parseInt(r[3],10):0;
+        if (h2<=24 && m2<=59){
+          var mins2 = adjustAmPm(h2,m2,ap2);
+          var norm2 = pad2(Math.floor(mins2/60))+':'+pad2(mins2%60);
+          var rest2 = t.replace(r[0],'').trim();
+          return { minutes: mins2, norm: norm2, rest: rest2 };
+        }
+      }
+      r = t.match(/(上午|早上|清晨)?\s*(\d{1,2})(點|時)/);
+      if (r){
+        var ap3 = r[1] ? r[1].toLowerCase() : '';
+        var h3 = parseInt(r[2],10);
+        if (h3<=24){
+          var mins3 = adjustAmPm(h3,0,ap3);
+          var norm3 = pad2(Math.floor(mins3/60))+':'+pad2(mins3%60);
+          var rest3 = t.replace(r[0],'').trim();
+          return { minutes: mins3, norm: norm3, rest: rest3 };
+        }
+      }
+      r = t.match(/(AM|PM)\s*(\d{1,2})(?=\D|$)/i);
+      if (r){
+        var ap4 = r[1].toLowerCase();
+        var h4 = parseInt(r[2],10);
+        if (h4<=24){
+          var mins4 = adjustAmPm(h4,0,ap4);
+          var norm4 = pad2(Math.floor(mins4/60))+':'+pad2(mins4%60);
+          var rest4 = t.replace(r[0],'').trim();
+          return { minutes: mins4, norm: norm4, rest: rest4 };
+        }
+      }
+      return null;
+    }
+    function adjustAmPm(h,m,ap){
+      var hh = h, mm = m;
+      if (!ap) return hh*60+mm;
+      ap = ap.toLowerCase();
+      if (ap.indexOf('下午')>=0 || ap.indexOf('中午')>=0 || ap.indexOf('晚上')>=0 || ap.indexOf('pm')>=0){
+        if (hh<12) hh += 12;
+      } else if (ap.indexOf('上午')>=0 || ap.indexOf('早上')>=0 || ap.indexOf('清晨')>=0 || ap.indexOf('am')>=0){
+        if (hh===12) hh = 0;
+      }
+      return hh*60+mm;
+    }
+
+    function copyDatedClauses(fullText){
+      var clauses = splitClauses(fullText);
+      var now = new Date();
+      for (var i=0;i<clauses.length;i++){
+        var original = clauses[i];
+        var info = parseDateInfo(original, now);
+        if (!info) continue;
+        var targetISO = info.iso;
+        var tail = info.tail || '';
+        var tinfo = parseTimeFrom(tail);
+        var content, display;
+        if (tinfo){
+          content = tinfo.rest.trim();
+          display = (tinfo.norm + ' ' + content).trim();
+        } else {
+          content = tail.trim();
+          display = content;
+        }
+        if (!display) continue;
+        var key = 'ingested:' + targetISO;
+        var bag = []; try { bag = JSON.parse(localStorage.getItem(key)||'[]') || []; } catch(e){ bag=[]; }
+        var fingerprint = 'v86|' + display;
+        if (bag.indexOf(fingerprint) < 0){
+          var note = loadNote(targetISO);
+          var newText = (note.text ? (note.text + '\n') : '') + display;
+          saveNote(targetISO, { text: newText });
+          setIndex(targetISO, true);
+          bag.push(fingerprint);
+          localStorage.setItem(key, JSON.stringify(bag));
+        }
+      }
+    }
+
+    // ===== Preview (3 items, time-sorted, exclude dated directives) =====
+    function normalizeFWLine(line){ return normalizeFW(line||'').trim(); }
+    function isDatedLine(line){
+      var s = normalizeFWLine(line);
+      if (!s) return false;
+      if (/^(20\d{2})[\/\-.]\d{1,2}[\/\-.]\d{1,2}/.test(s)) return true;
+      if (/^\d{1,2}[\/\-.]\d{1,2}(?!\d)/.test(s)) return true;
+      if (/^\d{1,2}月\d{1,2}[日號]/.test(s)) return true;
+      if (/^下個?月\d{1,2}[日號]/.test(s)) return true;
+      if (/^(本週|這週|這周|下週|下周)?(週|星期|禮拜)[日天一二三四五六]/.test(s)) return true;
+      if (/^(今天|今日|明天|翌日|隔天|後天)/.test(s)) return true;
+      return false;
+    }
+    function parseTimeFromLine(line){
+      var t = parseTimeFrom(line||'');
+      return t ? t.minutes : null;
+    }
+    function previewLinesForISO(iso, maxLines){
+      var note = loadNote(iso);
+      var lines = [];
+      if (note && note.text){
+        lines = note.text.split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean);
+      }
+      // dedupe
+      var seen = {}; var uniq = [];
+      for (var i=0;i<lines.length;i++){ var k=lines[i]; if (!seen[k]){ seen[k]=1; uniq.push(k);} }
+      var withTime = [], withoutTime = [];
+      for (var j=0;j<uniq.length;j++){
+        if (isDatedLine(uniq[j])) continue;
+        var mins = parseTimeFromLine(uniq[j]);
+        if (mins===null) withoutTime.push(uniq[j]); else withTime.push({line:uniq[j], mins:mins});
+      }
+      withTime.sort(function(a,b){ return a.mins - b.mins; });
+      var ordered = withTime.map(function(x){ return x.line; }).concat(withoutTime);
+      // 【修正 1 確保】過濾掉金額相關的語句 (確保日曆中不顯示每日收支細節內容)
+      var filtered = ordered.filter(function(line){
+          var normLine = normalizeFW(line);
+          // 過濾收支格式：+1000、-500、收入1000、支出500等
+          if (/^[\+\-]\d+/.test(normLine.trim())) return false; // 過濾 +1000、-500
+          if (/(?:收入|支出|in|ex)/i.test(normLine)) return false; // 過濾包含收入/支出關鍵字
+          // 過濾唐詩格式：包含 —— 和《》的行
+          if (/——.*《.*》/.test(line)) return false; // 過濾唐詩
+          return true;
+      });
+      return filtered.slice(0, maxLines);
+    }
+
+    // ===== Calendar render (修正週累計邏輯) =====
+    function renderCalendar(){
+      var first = new Date(state.y, state.m, 1);
+      var startDay = first.getDay();
+      var last = new Date(state.y, state.m + 1, 0);
+      var days = last.getDate();
+
+      monthLabel.textContent = state.y + '年 ' + (state.m+1) + '月';
+      grid.innerHTML = '';
+      var today = new Date();
+      var todayISO = isoFromDate(today);
+
+      for (var i=0;i<startDay;i++) grid.appendChild(document.createElement('div'));
+
+      for (var d=1; d<=days; d++){
+        var iso = isoOf(state.y, state.m, d);
+
+        var cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.iso = iso;
+        if (iso === todayISO) cell.classList.add('today');
+        if (state.currentISO === iso) cell.classList.add('selected');
+        
+        // 【修正 2】在週日顯示前一週 (上週日到上週六) 的淨額總和 (只顯示絕對值，統一藍色)
+        var currentDate = new Date(state.y, state.m, d);
+        if (currentDate.getDay() === 0) { // 0=日
+          var previousSunday = addDays(currentDate, -7); // 上週日 (前一週的開始)
+          var previousSaturday = addDays(currentDate, -1); // 上週六 (前一週的結束)
+          
+          var weekSummary = calculateSummary(previousSunday, previousSaturday); 
+          
+          var weekNet = weekSummary.income - weekSummary.expense;
+
+          if (weekSummary.income !== 0 || weekSummary.expense !== 0) {
+            // 修正: 僅顯示淨額的絕對值數字，不帶正負號，藍色，且移除標籤
+            var netDisplay = Math.abs(weekNet).toLocaleString(); // 絕對值，不顯示正負號
+            var netColor = 'var(--amount)'; // 始終使用藍色
+            
+            var summaryHtml = '<div class="preview" style="color:' + netColor + '; font-weight:700; text-align:center; padding-top:2px; font-size:.9rem;">' +
+                              netDisplay + // <-- 僅顯示數字
+                              '</div>';
+            
+            cell.insertAdjacentHTML('beforeend', summaryHtml);
+          }
+        }
+
+        var header = document.createElement('header');
+        var numWrap = document.createElement('div');
+        numWrap.className = 'day-num';
+        numWrap.textContent = String(d);
+        
+        // 檢查是否有收支或記帳數據，顯示藍色點
+        var amounts = loadAmounts(iso);
+        var accounting = loadAccounting(iso);
+        var hasAmount = amounts.income > 0 || amounts.expense > 0 || accounting.length > 0;
+        
+        // 檢查是否有文字內容（預約/行程），顯示紅色點
+        var note = loadNote(iso);
+        var hasNote = note.text && note.text.trim().length > 0;
+
+        if (hasAmount){
+          var dot = document.createElement('span');
+          dot.className = 'amount-dot'; // 藍色收支點
+          numWrap.appendChild(dot);
+        }
+        
+        if (hasNote){
+          var redDot = document.createElement('span');
+          redDot.className = 'note-dot'; // 紅色預約點
+          numWrap.appendChild(redDot);
+        }
+        
+        header.appendChild(numWrap);
+        header.appendChild(document.createElement('div'));
+        cell.appendChild(header);
+
+        // 顯示筆記預覽 (已過濾收支金額的邏輯，符合要求 1)
+        var previews = previewLinesForISO(iso, 3);
+        for (var i2=0;i2<previews.length;i2++){
+          var pv = document.createElement('div');
+          pv.className = 'preview';
+          pv.textContent = previews[i2];
+          cell.appendChild(pv);
+        }
+
+        cell.addEventListener('click', (function(isoCopy, cellRef){
+          return function(){
+            openNote(isoCopy);
+            if (state.selectedCell) state.selectedCell.classList.remove('selected');
+            state.selectedCell = cellRef;
+            state.selectedCell.classList.add('selected');
+          };
+        })(iso, cell));
+
+        grid.appendChild(cell);
+      }
+    }
+
+    function openNote(iso){
+      state.currentISO = iso;
+      var note = loadNote(iso);
+      textNote.value = note.text || '';
+      renderAccountingDetails();
+      
+      // 如果是星期日且文字欄為空，插入唐詩（只在當天才插入）
+      var date = new Date(iso);
+      var today = new Date();
+      today.setHours(0, 0, 0, 0); // 設定為當天的 00:00:00
+      var clickedDate = new Date(date);
+      clickedDate.setHours(0, 0, 0, 0);
+      
+      // 只有在點擊的日期是今天，且是星期日，且文字欄為空時，才插入唐詩
+      if (clickedDate.getTime() === today.getTime() && date.getDay() === 0 && !note.text) {
+        insertPoem();
+      }
+      
+      textNote.focus();
+    }
+
+    prevMonth.addEventListener('click', function(){
+      state.m--; if (state.m < 0){ state.m = 11; state.y--; } renderCalendar();
+    });
+    nextMonth.addEventListener('click', function(){
+      state.m++; if (state.m > 11){ state.m = 0; state.y++; } renderCalendar();
+    });
+
+    // Input events
+    textNote.addEventListener('input', function(){
+      if (isComposing) return;
+      scheduleRoute(700);
+    });
+    textNote.addEventListener('paste', function(){
+      setTimeout(function(){ scheduleRoute(300); }, 0);
+    });
+    textNote.addEventListener('blur', function(){
+      if (isComposing) return;
+      scheduleRoute(0);
+    });
+
+    // Export to PDF
+    exportBtn.addEventListener('click', function(){
+      if (!state.currentISO) return;
+      var note = loadNote(state.currentISO);
+      var win = window.open('', '_blank');
+      if (!win) { alert('請允許彈出視窗以匯出 PDF。'); return; }
+      var noteText = note.text || '';
+      var amounts = loadAmounts(state.currentISO);
+      
+      var amountSummary = '';
+      if (amounts.income > 0 || amounts.expense > 0) {
+          amountSummary = '\n\n--- 📅 收支總計 ---\n收入: ' + amounts.income.toLocaleString() + '\n支出: ' + amounts.expense.toLocaleString() + '\n---';
+      }
+
+      var title = '每日筆記 ' + state.currentISO;
+      var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+title+'</title>' +
+                 '<style>body{font-family:-apple-system,BlinkMacSystemFont,Roboto,\"Noto Sans TC\",\"PingFang TC\",\"Microsoft JhengHei",sans-serif;margin:24px;line-height:1.6}h1{font-size:18px;margin:0 0 12px}p{white-space:pre-wrap}</style>' +
+                 '</head><body>' +
+                 '<h1>'+title+'</h1>' +
+                 '<p>' + escapeHtml(noteText + amountSummary) + '</p>' +
+                 '<script>setTimeout(function(){window.print()}, 300);<\/script>' +
+                 '</body></html>';
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    });
+
+    function escapeHtml(s){
+      return s.replace(/[&<>"]/g, function(c){
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+      });
+    }
+
+    // Install helper
+    installBtn.addEventListener('click', function(){
+      alert('在 iPad 的 Safari 以「分享」→「加入主畫面」即可安裝。');
+    });
+
+    // ===== "每週活動安排" popover (multi-date + date-range) (保持不變) =====
+    openPlanBtn.addEventListener('click', function(){
+      var rect = openPlanBtn.getBoundingClientRect();
+      var bodyRect = document.body.getBoundingClientRect();
+      planPop.style.left = Math.max(8, rect.left - bodyRect.left) + 'px';
+      planPop.style.top = (rect.bottom + 8 + window.scrollY) + 'px';
+      buildPlanPop();
+      planPop.style.display = 'block';
+    });
+    
+    function buildPlanPop(){
+      var today = new Date();
+      var yyyy = today.getFullYear(), mm = pad2(today.getMonth()+1), dd = pad2(today.getDate());
+      planPop.innerHTML = ''
+        + '<div class="row"><span class="sectionTitle">單日</span></div>'
+        + '<div class="row">'
+        +   '<label class="muted" style="width:60px">日期</label>'
+        +   '<input id="sdDate" type="date" value="'+yyyy+'-'+mm+'-'+dd+'">'
+        +   '<button id="sdAdd">加入日期</button>'
+        + '</div>'
+        + '<div class="row"><span class="sectionTitle">日期範圍</span></div>'
+        + '<div class="row">'
+        +   '<label class="muted" style="width:60px">起始</label><input id="rgStart" type="date" value="'+yyyy+'-'+mm+'-'+dd+'">'
+        +   '<label class="muted" style="width:48px">結束</label><input id="rgEnd" type="date" value="'+yyyy+'-'+mm+'-'+dd+'">'
+        +   '<button id="rgAdd">加入範圍</button>'
+        + '</div>'
+        + '<div class="row"><div id="mdList" class="chips" aria-live="polite"></div></div>'
+        + '<div class="row"><label class="muted" style="width:60px">內容</label><input id="mdText" type="text" placeholder=""></div>'
+        + '<div class="row" style="justify-content:flex-end; gap:.5rem"><button id="mdInsert">插入</button><button id="mdClose" class="ghost">關閉</button></div>';
+
+      var pickSet = new Set();
+
+      function addISO(iso){
+        if (!iso) return;
+        pickSet.add(iso);
+        renderChips();
+      }
+      function addRangeISO(a, b){
+        if (!a || !b) return;
+        var s = new Date(a), e = new Date(b);
+        if (e < s){ var tmp=s; s=e; e=tmp; }
+        var cur = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+        while (cur <= e){
+          addISO(isoFromDate(cur));
+          cur.setDate(cur.getDate()+1);
+        }
+      }
+      function renderChips(){
+        var list = document.getElementById('mdList');
+        list.innerHTML = '';
+        Array.from(pickSet).sort().forEach(function(iso){
+          var parts = iso.split('-'); var m = parseInt(parts[1],10), d = parseInt(parts[2],10);
+          var chip = document.createElement('span'); chip.className='chip';
+          chip.innerHTML = m + '/' + d + '<button title="移除" data-iso="'+iso+'">×</button>';
+          list.appendChild(chip);
+        });
+        list.querySelectorAll('button[data-iso]').forEach(function(btn){
+          btn.addEventListener('click', function(){ pickSet.delete(btn.dataset.iso); renderChips(); });
+        });
+      }
+
+      document.getElementById('sdAdd').onclick = function(){
+        var iso = document.getElementById('sdDate').value;
+        addISO(iso);
+      };
+      document.getElementById('rgAdd').onclick = function(){
+        var a = document.getElementById('rgStart').value;
+        var b = document.getElementById('rgEnd').value;
+        addRangeISO(a, b);
+      };
+      document.getElementById('mdClose').onclick = function(){ planPop.style.display='none'; };
+
+      document.getElementById('mdInsert').onclick = function(){
+        var text = (document.getElementById('mdText').value||'').trim();
+        if (!text || pickSet.size===0){ planPop.style.display='none'; return; }
+        var ordered = Array.from(pickSet).sort();
+        
+        // 直接儲存到目標日期，不插入到當前文字欄
+        ordered.forEach(function(iso){
+          var note = loadNote(iso);
+          // 在文字欄第一排插入行程
+          if (note.text) {
+            note.text = text + '\n' + note.text;
+          } else {
+            note.text = text;
+          }
+          saveNote(iso, note);
+          setIndex(iso, true);
+        });
+        
+        planPop.style.display='none';
+        
+        // 跳轉到第一個目標日期
+        var firstISO = ordered[0];
+        openNote(firstISO);
+        renderCalendar();
+      };
+    }
+
+    function insertLinesAtCursor(lines){
+      var el = textNote;
+      var start = el.selectionStart, end = el.selectionEnd;
+      var txt = el.value;
+      var before = txt.slice(0,start);
+      var after  = txt.slice(end);
+      var block = lines.join('\n');
+      var sepBefore = (before.length && before[before.length-1] !== '\n') ? '\n' : '';
+      var sepAfter = (after.length && after[0] !== '\n') ? '\n' : '';
+      el.value = before + sepBefore + block + sepAfter + after;
+      el.focus();
+      el.selectionStart = el.selectionEnd = (before + sepBefore + block).length;
+    }
+
+
+    // ===== "收支報表" popover (保持報表邏輯不變) =====
+    openReportBtn.addEventListener('click', function(){
+      var rect = openReportBtn.getBoundingClientRect();
+      var bodyRect = document.body.getBoundingClientRect();
+      reportPop.style.left = Math.max(8, rect.left - bodyRect.left) + 'px';
+      reportPop.style.top = (rect.bottom + 8 + window.scrollY) + 'px';
+      buildReportPop();
+      reportPop.style.display = 'block';
+    });
+
+    function buildReportPop(){
+      var html = '<div class="row"><span class="sectionTitle">📊 ' + state.y + '年 ' + (state.m+1) + '月 收支報表</span></div>';
+      
+      // 1. 月度總計
+      var monthSummary = getMonthSummary(state.y, state.m); // 使用修正後的 getMonthSummary
+      var monthNet = monthSummary.income - monthSummary.expense;
+      
+      html += '<div class="row" style="margin-top:.7rem; align-items:flex-start">'
+            +   '<span class="sectionTitle" style="width:60px; flex-shrink:0">月總結</span>'
+            +   '<div style="flex:1">'
+            +     '<div class="chip" style="background:#dbeafe; color:var(--primary)">收入: ' + monthSummary.income.toLocaleString() + '</div> '
+            +     '<div class="chip" style="background:#fee2e2; color:var(--danger)">支出: ' + monthSummary.expense.toLocaleString() + '</div> '
+            +     '<div class="chip" style="background:#e0f2f1; color:' + (monthNet >= 0 ? 'green' : 'var(--danger)') + '">淨額: ' + monthNet.toLocaleString() + '</div>'
+            +   '</div>'
+            + '</div>';
+      
+      // 2. 每週報表
+      html += '<div class="row" style="margin-top:.7rem"><span class="sectionTitle">每週細項 (週日到週六)</span></div>';
+      
+      var lastDayOfMonth = new Date(state.y, state.m + 1, 0);
+      var firstDayOfMonth = new Date(state.y, state.m, 1);
+      var weeks = [];
+      var cur = new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), firstDayOfMonth.getDate());
+      
+      // 找到當月第一天所在的週日
+      var startWeek = addDays(cur, -cur.getDay());
+      
+      var weekStart = new Date(startWeek);
+      
+      while (weekStart <= lastDayOfMonth || weekStart.getMonth() === state.m || weekStart.getDay() !== 0){
+          var weekEnd = new Date(weekStart);
+          var isLastDay = isoFromDate(weekStart) === isoFromDate(lastDayOfMonth);
+
+          if (weekStart.getDay() === 6 || isLastDay){ // 週六或當月最後一天結束
+              
+              var weekBegin = addDays(weekEnd, -6);
+              
+              // 確保週起始日不超過當月第一天
+              if (weekBegin < firstDayOfMonth && weekStart >= firstDayOfMonth) {
+                  weekBegin = firstDayOfMonth; 
+              } else if (weekBegin.getMonth() !== weekStart.getMonth() && weekStart.getMonth() === state.m) {
+                  // 如果週開始日在上個月，且週結束日在這個月，則從這個月的第一天開始計算
+                  weekBegin = firstDayOfMonth; 
+              } else if (weekStart.getMonth() !== state.m) {
+                  // 忽略跨越到下個月的日期
+                  // 如果 weekStart已經是下個月，並且它不是從本月開始計算的，則跳出循環
+                  if (weekBegin.getMonth() !== state.m) break;
+              }
+
+
+              var weekSummary = calculateSummary(weekBegin, weekEnd);
+
+              var weekNet = weekSummary.income - weekSummary.expense;
+              
+              weeks.push({
+                  start: weekBegin,
+                  end: weekEnd,
+                  income: weekSummary.income,
+                  expense: weekSummary.expense,
+                  net: weekNet
+              });
+          }
+
+          weekStart.setDate(weekStart.getDate() + 1); // 移到下一天
+
+          if(weekStart > addDays(lastDayOfMonth, 6)) break; // 防止無限循環
+      }
+
+      html += '<table style="width:100%; border-collapse:collapse; font-size:.9rem; margin-top:.5rem">'
+            +   '<thead><tr style="background:var(--surface)">'
+            +     '<th style="border:1px solid var(--border); padding:.4rem; text-align:left">區間</th>'
+            +     '<th style="border:1px solid var(--border); padding:.4rem">收入</th>'
+            +     '<th style="border:1px solid var(--border); padding:.4rem">支出</th>'
+            +     '<th style="border:1px solid var(--border); padding:.4rem">淨額</th>'
+            +   '</tr></thead><tbody>';
+      
+      weeks.forEach(function(w){
+          var startM = w.start.getMonth()+1, startD = w.start.getDate();
+          var endM = w.end.getMonth()+1, endD = w.end.getDate();
+          var startStr = (w.start.getFullYear() !== state.y) ? w.start.getFullYear() + '/' : '';
+          var endStr = (w.end.getFullYear() !== state.y) ? w.end.getFullYear() + '/' : '';
+
+          html += '<tr>'
+                +   '<td style="border:1px solid var(--border); padding:.4rem">' + startStr + startM + '/' + startD + ' - ' + endStr + endM + '/' + endD + '</td>'
+                +   '<td style="border:1px solid var(--border); padding:.4rem; text-align:right; color:var(--primary)">' + w.income.toLocaleString() + '</td>'
+                +   '<td style="border:1px solid var(--border); padding:.4rem; text-align:right; color:var(--danger)">' + w.expense.toLocaleString() + '</td>'
+                +   '<td style="border:1px solid var(--border); padding:.4rem; text-align:right; font-weight:700; color:' + (w.net >= 0 ? 'green' : 'var(--danger)') + '">' + w.net.toLocaleString() + '</td>'
+                + '</tr>';
+      });
+      
+      html += '</tbody></table>';
+      
+      html += '<div class="row" style="justify-content:flex-end; gap:.5rem; margin-top:1rem"><button id="rpClose" class="ghost">關閉</button></div>';
+
+      reportPop.innerHTML = html;
+      document.getElementById('rpClose').onclick = function(){ reportPop.style.display='none'; };
+    }
+
+
+    
+    
+    // ===== 我的筆記功能 =====
+    var openMyNotesBtn = document.getElementById('openMyNotes');
+    var myNotesPop = document.getElementById('myNotesPop');
+    var currentEditingNoteId = null;
+    var speechRecognition = null;
+    var speechSynthesisUtterance = null;
+    
+    // 載入所有筆記
+    function loadMyNotes(){
+      try {
+        return JSON.parse(localStorage.getItem('myNotes') || '[]');
+      } catch(e){
+        return [];
+      }
+    }
+    
+    // 儲存所有筆記
+    function saveMyNotes(notes){
+      localStorage.setItem('myNotes', JSON.stringify(notes));
+    }
+    
+    // 開啟筆記視窗
+    openMyNotesBtn.onclick = function(){
+      showNotesList();
+      myNotesPop.style.display = 'block';
+    };
+    
+    // 顯示筆記列表
+    function showNotesList(){
+      var notes = loadMyNotes();
+      var html = '<div class="sectionTitle">📝 我的筆記</div>';
+      html += '<div class="row" style="margin-top:1rem"><button id="mnNew">➕ 新增筆記</button><button id="mnClose" class="ghost">關閉</button></div>';
+      
+      if (notes.length === 0){
+        html += '<div style="text-align:center; padding:3rem; color:var(--muted)">尚無筆記，點擊「新增筆記」開始</div>';
+      } else {
+        html += '<div style="margin-top:1rem; display:grid; gap:.75rem">';
+        notes.forEach(function(note, index){
+          var date = new Date(note.created);
+          var dateStr = date.getFullYear() + '/' + (date.getMonth()+1) + '/' + date.getDate() + ' ' + date.getHours() + ':' + String(date.getMinutes()).padStart(2,'0');
+          var preview = note.content.substring(0, 80);
+          html += '<div style="border:1px solid var(--border); border-radius:.5rem; padding:.75rem; cursor:pointer; background:#fff" data-note-id="' + note.id + '">';
+          html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.5rem">';
+          html += '<div style="font-weight:700; font-size:1rem">' + (note.title || '無標題') + '</div>';
+          html += '<div style="font-size:.85rem; color:var(--muted)">' + dateStr + '</div>';
+          html += '</div>';
+          html += '<div style="color:var(--muted); font-size:.9rem">' + preview + '</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+      
+      myNotesPop.innerHTML = html;
+      
+      document.getElementById('mnNew').onclick = function(){ createNewNote(); };
+      document.getElementById('mnClose').onclick = function(){ myNotesPop.style.display='none'; };
+      
+      // 綁定筆記點擊事件
+      myNotesPop.querySelectorAll('[data-note-id]').forEach(function(card){
+        card.onclick = function(){
+          var noteId = card.getAttribute('data-note-id');
+          openNoteEditor(noteId);
+        };
+      });
+    }
+    
+    // 建立新筆記
+    function createNewNote(){
+      var notes = loadMyNotes();
+      var newNote = {
+        id: 'note_' + Date.now(),
+        title: '',
+        content: '',
+        created: new Date().toISOString(),
+        modified: new Date().toISOString()
+      };
+      notes.unshift(newNote);
+      saveMyNotes(notes);
+      openNoteEditor(newNote.id);
+    }
+    
+    // 開啟筆記編輯器
+    function openNoteEditor(noteId){
+      currentEditingNoteId = noteId;
+      var notes = loadMyNotes();
+      var note = notes.find(function(n){ return n.id === noteId; });
+      if (!note) return;
+      
+      var html = '<div class="sectionTitle">✒️ 編輯筆記</div>';
+      html += '<div class="row" style="margin-top:1rem; flex-wrap:wrap">';
+      html += '<button id="mnSave">💾 儲存</button>';
+      html += '<button id="mnVoice">🎤 語音記錄</button>';
+      html += '<button id="mnRead">🔊 朗讀文章</button>';
+      html += '<button id="mnImport">📅 匯入</button>';
+      html += '<button id="mnExport">📄 匯出</button>';
+      html += '<button id="mnDrawing" style="background:var(--primary); color:white">✍️ 手寫模式</button>';
+      html += '<button id="mnDelete" style="color:var(--danger)">🗑️ 刪除</button>';
+      html += '<button id="mnBack" class="ghost">← 返回列表</button>';
+      html += '</div>';
+      html += '<div id="recordingIndicator" style="display:none; margin-top:.5rem; padding:.5rem; background:#fee; border:1px solid #fcc; border-radius:.5rem; color:#c00">';
+      html += '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#c00; animation:pulse 1.5s infinite; margin-right:.5rem"></span>';
+      html += '錄音中...';
+      html += '</div>';
+      html += '<input type="text" id="mnTitle" placeholder="筆記標題" value="' + (note.title || '') + '" style="width:100%; padding:.75rem; border:1px solid var(--border); border-radius:.5rem; font-size:1.1rem; font-weight:700; margin-top:1rem" />';
+      html += '<textarea id="mnContent" placeholder="開始輸入您的筆記內容..." style="width:100%; min-height:400px; padding:.75rem; border:1px solid var(--border); border-radius:.5rem; font-size:1rem; line-height:1.6; resize:vertical; margin-top:1rem">' + (note.content || '') + '</textarea>';
+      
+      // 手寫板區域
+      html += '<div id="drawingArea" style="display:none; margin-top:1rem; border:1px solid var(--border); border-radius:.5rem; padding:1rem; background:#f9fafb">';
+      html += '<div class="sectionTitle">✍️ 手寫板</div>';
+      html += '<div class="row" style="margin-top:.5rem; flex-wrap:wrap; gap:.5rem">';
+      html += '<button id="drawPen" class="ghost" style="background:var(--primary); color:white">🖊️ 畫筆</button>';
+      html += '<button id="drawEraser" class="ghost">🧹 橡皮擦</button>';
+      html += '<input type="color" id="drawColor" value="#000000" style="width:60px; height:36px; border:1px solid var(--border); border-radius:.25rem; cursor:pointer" />';
+      html += '<select id="drawSize" style="padding:.5rem; border:1px solid var(--border); border-radius:.25rem">';
+      html += '<option value="2">細筆 (2px)</option>';
+      html += '<option value="5" selected>中筆 (5px)</option>';
+      html += '<option value="10">粗筆 (10px)</option>';
+      html += '<option value="20">特粗 (20px)</option>';
+      html += '</select>';
+      html += '<button id="drawClear" class="ghost" style="color:var(--danger)">🗑️ 清除畫布</button>';
+      html += '<button id="drawSave" class="ghost" style="background:var(--primary); color:white">💾 儲存手寫</button>';
+      html += '<button id="drawClose" class="ghost">關閉手寫板</button>';
+      html += '</div>';
+      html += '<canvas id="drawCanvas" width="800" height="600" style="width:100%; max-width:800px; height:auto; border:2px solid var(--border); border-radius:.5rem; margin-top:1rem; background:white; cursor:crosshair; touch-action:none"></canvas>';
+      html += '<div id="drawingPreview" style="margin-top:1rem"></div>';
+      html += '</div>';
+      
+      myNotesPop.innerHTML = html;
+      
+      document.getElementById('mnSave').onclick = function(){ saveCurrentNote(); };
+      document.getElementById('mnVoice').onclick = function(){ toggleVoiceRecording(); };
+      document.getElementById('mnRead').onclick = function(){ toggleReadAloud(); };
+      document.getElementById('mnImport').onclick = function(){ importNote(); };
+      document.getElementById('mnExport').onclick = function(){ exportNote(); };
+      document.getElementById('mnDelete').onclick = function(){ deleteCurrentNote(); };
+      document.getElementById('mnBack').onclick = function(){ showNotesList(); };
+      document.getElementById('mnDrawing').onclick = function(){ toggleDrawingMode(); };
+      
+      // 初始化手寫板（如果有儲存的手寫內容）
+      if (note.drawing){
+        var preview = document.getElementById('drawingPreview');
+        preview.innerHTML = '<div style="padding:.5rem; background:white; border:1px solid var(--border); border-radius:.5rem"><img src="' + note.drawing + '" style="max-width:100%; height:auto; border-radius:.25rem" /></div>';
+      }
+    }
+    
+    // 儲存當前筆記
+    function saveCurrentNote(){
+      if (!currentEditingNoteId) return;
+      var notes = loadMyNotes();
+      var note = notes.find(function(n){ return n.id === currentEditingNoteId; });
+      if (!note) return;
+      
+      note.title = document.getElementById('mnTitle').value;
+      note.content = document.getElementById('mnContent').value;
+      note.modified = new Date().toISOString();
+      
+      saveMyNotes(notes);
+      alert('筆記已儲存');
+    }
+    
+    // 語音記錄
+    function toggleVoiceRecording(){
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)){
+        alert('您的瀏覽器不支援語音辨識功能，請使用 Chrome 或 Edge 瀏覽器');
+        return;
+      }
+      
+      if (speechRecognition && speechRecognition.started){
+        speechRecognition.stop();
+        return;
+      }
+      
+      var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      speechRecognition = new SpeechRecognition();
+      speechRecognition.lang = 'zh-TW';
+      speechRecognition.continuous = true;
+      speechRecognition.interimResults = true;
+      
+      speechRecognition.onstart = function(){
+        speechRecognition.started = true;
+        document.getElementById('recordingIndicator').style.display = 'block';
+        document.getElementById('mnVoice').textContent = '⏹️ 停止錄音';
+      };
+      
+      speechRecognition.onresult = function(event){
+        var transcript = '';
+        for (var i = event.resultIndex; i < event.results.length; i++){
+          transcript += event.results[i][0].transcript;
+        }
+        var textarea = document.getElementById('mnContent');
+        if (textarea){
+          textarea.value += transcript;
+        }
+      };
+      
+      speechRecognition.onend = function(){
+        speechRecognition.started = false;
+        var indicator = document.getElementById('recordingIndicator');
+        if (indicator) indicator.style.display = 'none';
+        var btn = document.getElementById('mnVoice');
+        if (btn) btn.textContent = '🎤 語音記錄';
+      };
+      
+      speechRecognition.onerror = function(event){
+        console.error('語音辨識錯誤:', event.error);
+        speechRecognition.started = false;
+        var indicator = document.getElementById('recordingIndicator');
+        if (indicator) indicator.style.display = 'none';
+        var btn = document.getElementById('mnVoice');
+        if (btn) btn.textContent = '🎤 語音記錄';
+      };
+      
+      speechRecognition.start();
+    }
+    
+    // 朗讀文章
+    function toggleReadAloud(){
+      if (!window.speechSynthesis){
+        alert('您的瀏覽器不支援語音合成功能');
+        return;
+      }
+      
+      if (window.speechSynthesis.speaking){
+        window.speechSynthesis.cancel();
+        document.getElementById('mnRead').textContent = '🔊 朗讀文章';
+        return;
+      }
+      
+      var content = document.getElementById('mnContent').value;
+      if (!content){
+        alert('請先輸入內容');
+        return;
+      }
+      
+      speechSynthesisUtterance = new SpeechSynthesisUtterance(content);
+      speechSynthesisUtterance.lang = 'zh-TW';
+      speechSynthesisUtterance.rate = 1.0;
+      speechSynthesisUtterance.pitch = 1.0;
+      
+      speechSynthesisUtterance.onstart = function(){
+        document.getElementById('mnRead').textContent = '⏹️ 停止朗讀';
+      };
+      
+      speechSynthesisUtterance.onend = function(){
+        document.getElementById('mnRead').textContent = '🔊 朗讀文章';
+      };
+      
+      window.speechSynthesis.speak(speechSynthesisUtterance);
+    }
+    
+    // 匯入文章
+    function importNote(){
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.txt,.md';
+      
+      input.onchange = function(e){
+        var file = e.target.files[0];
+        if (!file) return;
+        
+        var reader = new FileReader();
+        reader.onload = function(event){
+          var content = event.target.result;
+          document.getElementById('mnContent').value = content;
+          alert('檔案已匯入');
+        };
+        reader.readAsText(file);
+      };
+      
+      input.click();
+    }
+    
+    // 匯出文章
+    function exportNote(){
+      var title = document.getElementById('mnTitle').value || '無標題';
+      var content = document.getElementById('mnContent').value;
+      
+      if (!content){
+        alert('請先輸入內容');
+        return;
+      }
+      
+      var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = title + '.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    
+    // 刪除當前筆記
+    function deleteCurrentNote(){
+      if (!currentEditingNoteId) return;
+      if (!confirm('確定要刪除這篇筆記嗎？')) return;
+      
+      var notes = loadMyNotes();
+      notes = notes.filter(function(n){ return n.id !== currentEditingNoteId; });
+      saveMyNotes(notes);
+      showNotesList();
+    }
+    
+    // ========== 手寫板功能 ==========
+    var drawingCanvas = null;
+    var drawingCtx = null;
+    var isDrawing = false;
+    var drawingTool = 'pen'; // 'pen' or 'eraser'
+    var drawingColor = '#000000';
+    var drawingSize = 5;
+    
+    // 切換手寫模式
+    function toggleDrawingMode(){
+      var area = document.getElementById('drawingArea');
+      var btn = document.getElementById('mnDrawing');
+      
+      if (area.style.display === 'none'){
+        area.style.display = 'block';
+        btn.textContent = '✔️ 手寫模式';
+        btn.style.background = '#10b981';
+        initDrawingCanvas();
+      } else {
+        area.style.display = 'none';
+        btn.textContent = '✍️ 手寫模式';
+        btn.style.background = 'var(--primary)';
+      }
+    }
+    
+    // 初始化手寫板
+    function initDrawingCanvas(){
+      drawingCanvas = document.getElementById('drawCanvas');
+      if (!drawingCanvas) return;
+      
+      drawingCtx = drawingCanvas.getContext('2d');
+      
+      // 設定畫布背景為白色
+      drawingCtx.fillStyle = 'white';
+      drawingCtx.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+      
+      // 載入已儲存的手寫內容
+      var notes = loadMyNotes();
+      var note = notes.find(function(n){ return n.id === currentEditingNoteId; });
+      if (note && note.drawing){
+        var img = new Image();
+        img.onload = function(){
+          drawingCtx.drawImage(img, 0, 0);
+        };
+        img.src = note.drawing;
+      }
+      
+      // 綁定工具按鈕
+      document.getElementById('drawPen').onclick = function(){
+        drawingTool = 'pen';
+        updateToolButtons();
+      };
+      document.getElementById('drawEraser').onclick = function(){
+        drawingTool = 'eraser';
+        updateToolButtons();
+      };
+      document.getElementById('drawColor').oninput = function(){
+        drawingColor = this.value;
+        drawingTool = 'pen';
+        updateToolButtons();
+      };
+      document.getElementById('drawSize').onchange = function(){
+        drawingSize = parseInt(this.value);
+      };
+      document.getElementById('drawClear').onclick = function(){
+        if (confirm('確定要清除整個畫布嗎？')){
+          drawingCtx.fillStyle = 'white';
+          drawingCtx.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+        }
+      };
+      document.getElementById('drawSave').onclick = function(){
+        saveDrawing();
+      };
+      document.getElementById('drawClose').onclick = function(){
+        toggleDrawingMode();
+      };
+      
+      // 綁定滑鼠事件
+      drawingCanvas.addEventListener('mousedown', startDrawing);
+      drawingCanvas.addEventListener('mousemove', draw);
+      drawingCanvas.addEventListener('mouseup', stopDrawing);
+      drawingCanvas.addEventListener('mouseout', stopDrawing);
+      
+      // 綁定觸控事件
+      drawingCanvas.addEventListener('touchstart', handleTouchStart);
+      drawingCanvas.addEventListener('touchmove', handleTouchMove);
+      drawingCanvas.addEventListener('touchend', stopDrawing);
+      
+      updateToolButtons();
+    }
+    
+    // 更新工具按鈕狀態
+    function updateToolButtons(){
+      var penBtn = document.getElementById('drawPen');
+      var eraserBtn = document.getElementById('drawEraser');
+      
+      if (drawingTool === 'pen'){
+        penBtn.style.background = 'var(--primary)';
+        penBtn.style.color = 'white';
+        eraserBtn.style.background = '';
+        eraserBtn.style.color = '';
+      } else {
+        penBtn.style.background = '';
+        penBtn.style.color = '';
+        eraserBtn.style.background = 'var(--primary)';
+        eraserBtn.style.color = 'white';
+      }
+    }
+    
+    // 開始繪圖
+    function startDrawing(e){
+      isDrawing = true;
+      var rect = drawingCanvas.getBoundingClientRect();
+      var scaleX = drawingCanvas.width / rect.width;
+      var scaleY = drawingCanvas.height / rect.height;
+      var x = (e.clientX - rect.left) * scaleX;
+      var y = (e.clientY - rect.top) * scaleY;
+      
+      drawingCtx.beginPath();
+      drawingCtx.moveTo(x, y);
+    }
+    
+    // 繪圖
+    function draw(e){
+      if (!isDrawing) return;
+      
+      var rect = drawingCanvas.getBoundingClientRect();
+      var scaleX = drawingCanvas.width / rect.width;
+      var scaleY = drawingCanvas.height / rect.height;
+      var x = (e.clientX - rect.left) * scaleX;
+      var y = (e.clientY - rect.top) * scaleY;
+      
+      if (drawingTool === 'pen'){
+        drawingCtx.strokeStyle = drawingColor;
+        drawingCtx.lineWidth = drawingSize;
+        drawingCtx.lineCap = 'round';
+        drawingCtx.lineJoin = 'round';
+      } else {
+        drawingCtx.strokeStyle = 'white';
+        drawingCtx.lineWidth = drawingSize * 2;
+        drawingCtx.lineCap = 'round';
+        drawingCtx.lineJoin = 'round';
+      }
+      
+      drawingCtx.lineTo(x, y);
+      drawingCtx.stroke();
+    }
+    
+    // 停止繪圖
+    function stopDrawing(){
+      isDrawing = false;
+      drawingCtx.beginPath();
+    }
+    
+    // 處理觸控開始
+    function handleTouchStart(e){
+      e.preventDefault();
+      var touch = e.touches[0];
+      var mouseEvent = new MouseEvent('mousedown', {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+      });
+      drawingCanvas.dispatchEvent(mouseEvent);
+    }
+    
+    // 處理觸控移動
+    function handleTouchMove(e){
+      e.preventDefault();
+      var touch = e.touches[0];
+      var mouseEvent = new MouseEvent('mousemove', {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+      });
+      drawingCanvas.dispatchEvent(mouseEvent);
+    }
+    
+    // 儲存手寫內容
+    function saveDrawing(){
+      if (!drawingCanvas) return;
+      
+      var notes = loadMyNotes();
+      var note = notes.find(function(n){ return n.id === currentEditingNoteId; });
+      if (!note) return;
+      
+      // 將 Canvas 轉換為 Base64 圖片
+      note.drawing = drawingCanvas.toDataURL('image/png');
+      note.modified = new Date().toISOString();
+      
+      saveMyNotes(notes);
+      
+      // 更新預覽
+      var preview = document.getElementById('drawingPreview');
+      preview.innerHTML = '<div style="padding:.5rem; background:white; border:1px solid var(--border); border-radius:.5rem; margin-top:.5rem"><div style="color:var(--muted); font-size:.875rem; margin-bottom:.5rem">✅ 手寫內容已儲存</div><img src="' + note.drawing + '" style="max-width:100%; height:auto; border-radius:.25rem" /></div>';
+      
+      alert('手寫內容已儲存！');
+    }
+    
+    // Init
+    renderCalendar();
+    var now = new Date();
+    openNote(isoFromDate(now));
+  })();
+  </script>
+</body>
+</html>

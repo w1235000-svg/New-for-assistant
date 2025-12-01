@@ -4,13 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="light">
-  <title>簡易日曆筆記 v10.0（筆記功能整合版／iPad Safari 版）</title>
+  <title>簡易日曆筆記 v10.5（最終版）</title>
+  <!-- Mammoth.js for Word document import -->
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
   <style>
   :root{
     --bg:#ffffff; --fg:#111111; --muted:#6b7280;
     --primary:#2563eb; --danger:#dc2626; --border:#e5e7eb;
     --selected:#f1f5f9; --surface:#f9fafb;
-    --amount:#3b82f6;
+    --amount:#3b82f6; /* 藍色收支點/淨額顏色 */
   }
   *{box-sizing:border-box}
   html,body{height:100%; -webkit-text-size-adjust:100%}
@@ -61,6 +63,7 @@
     width:100%; margin-top:.3cm; min-height:22.5vh; resize:vertical;
     padding:.75rem; border:1px solid var(--border); border-radius:.5rem; font-size:1rem; line-height:1.6;
   }
+  /* Popover */
   .popover{
     position:absolute; z-index:10; background:#fff; border:1px solid var(--border); border-radius:.6rem;
     box-shadow:0 8px 24px rgba(0,0,0,.08); padding:.6rem; width:min(560px, 94vw);
@@ -71,24 +74,230 @@
   .chip{ display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--border); background:var(--surface); border-radius:999px; padding:.2rem .55rem; font-size:.86rem }
   .chip button{ border:none; background:transparent; cursor:pointer; padding:0 .2rem }
   .sectionTitle{ font-weight:700; font-size:.9rem; color:#111; }
+  
+  /* 浮動手寫板樣式 */
+  /* 通用浮動視窗樣式 */
+  .floating-window{
+    position:fixed;
+    top:50%;
+    left:50%;
+    transform:translate(-50%, -50%);
+    z-index:1000;
+    background:#fff;
+    border:2px solid var(--primary);
+    border-radius:.8rem;
+    box-shadow:0 12px 40px rgba(0,0,0,.15);
+    padding:0;
+    display:none;
+  }
+  
+  .floating-window.active{
+    display:block;
+  }
+  
+  .floating-header{
+    display:flex;
+    align-items:center;
+    gap:.5rem;
+    padding:.75rem 1rem;
+    background:var(--primary);
+    color:#fff;
+    border-radius:.6rem .6rem 0 0;
+    cursor:move;
+    user-select:none;
+  }
+  
+  .floating-header h3{
+    margin:0;
+    font-size:1rem;
+    flex:1;
+  }
+  
+  .floating-header button{
+    background:rgba(255,255,255,.2);
+    border:none;
+    color:#fff;
+    padding:.35rem .6rem;
+    border-radius:.3rem;
+    cursor:pointer;
+    font-size:.9rem;
+  }
+  
+  .floating-header button:hover{
+    background:rgba(255,255,255,.3);
+  }
+  
+  .floating-body{
+    padding:1rem;
+  }
+  
+  /* 舊樣式相容 */
+  .drawing-toolbar{
+    display:flex;
+    gap:.5rem;
+    flex-wrap:wrap;
+    align-items:center;
+    padding:.75rem;
+    background:var(--surface);
+    border-radius:.5rem;
+    margin-bottom:.75rem;
+  }
+  
+  /* 工具列浮動視窗 */
+  #floatingToolbar{
+    min-width:400px;
+    max-width:600px;
+  }
+  
+  .toolbar-body{
+    display:flex;
+    gap:.5rem;
+    flex-wrap:wrap;
+    align-items:center;
+    padding:1rem;
+  }
+  
+  .tool-btn{
+    padding:.5rem 1rem;
+    border:1px solid #ddd;
+    background:#fff;
+    border-radius:.4rem;
+    cursor:pointer;
+    font-size:.9rem;
+    transition:all .2s;
+  }
+  
+  .tool-btn:hover{
+    background:var(--surface);
+  }
+  
+  .tool-btn.active{
+    background:var(--primary);
+    color:#fff;
+    border-color:var(--primary);
+  }
+  
+  #drawColor{
+    width:50px;
+    height:38px;
+    border:1px solid #ddd;
+    border-radius:.4rem;
+    cursor:pointer;
+  }
+  
+  #drawSize{
+    padding:.5rem;
+    border:1px solid #ddd;
+    border-radius:.4rem;
+    background:#fff;
+    cursor:pointer;
+  }
+  
+  /* 手寫板浮動視窗 (4cm × 4cm) */
+  #floatingCanvas{
+    width:240px;
+  }
+  
+  .canvas-body{
+    padding:1rem;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+  }
+  
+  #miniCanvas{
+    width:200px;
+    height:200px;
+    border:2px dashed #999;
+    border-radius:.5rem;
+    background:#fff;
+    cursor:crosshair;
+    display:block;
+  }
+  
+  .mini-toolbar{
+    display:flex;
+    gap:.5rem;
+    align-items:center;
+    justify-content:center;
+    padding:.75rem;
+    background:var(--surface);
+    border-radius:0 0 .6rem .6rem;
+  }
+  
+  .mini-tool-btn{
+    padding:.5rem;
+    border:1px solid #ddd;
+    background:#fff;
+    border-radius:.4rem;
+    cursor:pointer;
+    font-size:1.2rem;
+    transition:all .2s;
+    min-width:40px;
+    min-height:40px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  
+  .mini-tool-btn:hover{
+    background:var(--surface);
+  }
+  
+  .mini-tool-btn.active{
+    background:var(--primary);
+    color:#fff;
+    border-color:var(--primary);
+  }
+  
+  .drawing-toolbar button{
+    padding:.4rem .7rem;
+    font-size:.9rem;
+  }
+  
+  .drawing-toolbar button.active{
+    background:var(--primary);
+    color:#fff;
+    border-color:var(--primary);
+  }
+  
+  .drawing-toolbar input[type="color"]{
+    width:50px;
+    height:35px;
+    border:1px solid var(--border);
+    border-radius:.3rem;
+    cursor:pointer;
+  }
+  
+  .drawing-toolbar select{
+    padding:.4rem .5rem;
+    border:1px solid var(--border);
+    border-radius:.3rem;
+    font-size:.9rem;
+  }
+  
+  #drawCanvas{
+    border:2px dashed #9333ea;
+    border-radius:.5rem;
+    background:#fff;
+    display:block;
+    cursor:crosshair;
+    touch-action:none;
+  }
+  
   @media print{
     body{ background:#fff }
     .topbar, #calendarPane, .popover{ display:none !important }
     #notePane{ padding:0; }
   }
-  @keyframes pulse{
-    0%{opacity:0.2;transform:scale(1)}
-    50%{opacity:1;transform:scale(1.4)}
-    100%{opacity:0.2;transform:scale(1)}
-  }
   </style>
-<style>
-/* Dark Theme Injected */
-body { background:#1a1b1e; color:#eee; }
-</style></head>
+</head>
 <body>
+  <!-- 隱藏的檔案輸入元素 -->
+  <input type="file" id="hiddenFileInput" accept=".txt,.md,.doc,.docx" style="display:none" />
+  
   <header class="topbar">
-    <h1>簡易日曆筆記 v10.0</h1>
+    <h1>簡易日曆筆記 v10.5</h1>
     <div class="spacer"></div>
     <button id="installBtn" class="ghost" title="加入主畫面（可選）">加入主畫面</button>
   </header>
@@ -125,25 +334,8 @@ body { background:#1a1b1e; color:#eee; }
   </main>
 
   <script>
-  (function(){
-    var grid = document.getElementById('grid');
-    var monthLabel = document.getElementById('monthLabel');
-    var prevMonth = document.getElementById('prevMonth');
-    var nextMonth = document.getElementById('nextMonth');
-    var textNote = document.getElementById('textNote');
-    var installBtn = document.getElementById('installBtn');
-    var exportBtn = document.getElementById('exportPdf');
-    var openPlanBtn = document.getElementById('openPlan');
-    var planPop = document.getElementById('planPop');
-    var openReportBtn = document.getElementById('openReport');
-    var reportPop = document.getElementById('reportPop');
-    var accountingDetailsDiv = document.getElementById('accountingDetails');
-    var openMyNotesBtn = document.getElementById('openMyNotes');
-    var myNotesPop = document.getElementById('myNotesPop');
 
-    var state = { y:new Date().getFullYear(), m:new Date().getMonth(), currentISO:null, selectedCell:null };
-
-    // ===== 唐詩五言絕句資料 =====
+    // ===== 唐詩五言絕句資料庫 =====
     var tangPoems = [
       { title: '靜夜思', author: '李白', content: '床前明月光，疑是地上霜。舉頭望明月，低頭思故鄉。' },
       { title: '登鸛雀樓', author: '王之渙', content: '白日依山盡，黃河入海流。欲窮千里目，更上一層樓。' },
@@ -167,22 +359,40 @@ body { background:#1a1b1e; color:#eee; }
       { title: '八陣圖', author: '杜甫', content: '功蓋三分國，名成八陣圖。江流石不轉，遺恨失吞吳。' }
     ];
 
+    // 隨機選擇一首唐詩
     function getRandomPoem() {
       var index = Math.floor(Math.random() * tangPoems.length);
       return tangPoems[index];
     }
 
+    // 插入唐詩到文字欄第一排
     function insertPoem() {
       var poem = getRandomPoem();
       var poemText = poem.content + ' —— ' + poem.author + '《' + poem.title + '》';
-      var currentText = textNote.value || '';
+      var currentText = textNote.value;
       if (currentText) {
-        textNote.value = poemText + "\n" + currentText;
+        textNote.value = poemText + '\n' + currentText;
       } else {
         textNote.value = poemText;
       }
       autoSave();
     }
+
+  (function(){
+    var grid = document.getElementById('grid');
+    var monthLabel = document.getElementById('monthLabel');
+    var prevMonth = document.getElementById('prevMonth');
+    var nextMonth = document.getElementById('nextMonth');
+    var textNote = document.getElementById('textNote');
+    var installBtn = document.getElementById('installBtn');
+    var exportBtn = document.getElementById('exportPdf');
+    var openPlanBtn = document.getElementById('openPlan');
+    var planPop = document.getElementById('planPop');
+    var openReportBtn = document.getElementById('openReport');
+    var reportPop = document.getElementById('reportPop');
+    var accountingDetailsDiv = document.getElementById('accountingDetails');
+
+    var state = { y:new Date().getFullYear(), m:new Date().getMonth(), currentISO:null, selectedCell:null };
 
     // ===== Helpers =====
     function pad2(n){ return String(n).padStart(2,'0'); }
@@ -195,7 +405,7 @@ body { background:#1a1b1e; color:#eee; }
       if (hasContent) idx[iso] = 1; else delete idx[iso];
       localStorage.setItem('noteIndex', JSON.stringify(idx));
     }
-
+    
     function loadAmounts(iso){ try { return JSON.parse(localStorage.getItem('amounts:' + iso) || 'null') || {income:0, expense:0}; } catch(e){ return {income:0, expense:0}; } }
 
     function setAmountIndex(iso, hasContent){
@@ -203,8 +413,8 @@ body { background:#1a1b1e; color:#eee; }
       if (hasContent) idx[iso] = 1; else delete idx[iso];
       localStorage.setItem('amountIndex', JSON.stringify(idx));
     }
-
-    // 收支解析
+    
+    // 從文本中解析收支金額
     function parseAmounts(text){
       var lines = text.split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean);
       var income = 0, expense = 0;
@@ -212,32 +422,37 @@ body { background:#1a1b1e; color:#eee; }
 
       for (var i=0;i<lines.length;i++){
         normText = normalizeFW(lines[i]);
-
+        
+        // 1. 匹配收入關鍵字: 「中獎」、「獎金」、「收入」等
         var incKeywordMatch = normText.match(/(?:中獎|獎金|薪水|薪資|紅包|利息|收入|income)[^\d]*(\d+)(?:\s*(?:元|塊))?/i);
         if (incKeywordMatch){
           var num = parseFloat(incKeywordMatch[1].replace(/,/g, ''));
           if (!isNaN(num)) income += num;
           continue;
         }
-
+        
+        // 2. 匹配收入格式: 「+1000」或「數字+收入」
         var incMatch = normText.match(/(?:^|\s)\+(\d+)(?:\s*(?:元|塊))?(?:\s|$)/i);
         if (incMatch){
-          var num2 = parseFloat(incMatch[1].replace(/,/g, ''));
-          if (!isNaN(num2)) income += num2;
+          var num = parseFloat(incMatch[1].replace(/,/g, ''));
+          if (!isNaN(num)) income += num;
           continue;
         }
 
+        // 3. 匹配支出: 「-500」或「支出500」
         var expMatch = normText.match(/(?:^|\s)-(\d+)(?:\s*(?:元|塊|支出|ex))?|(\d+)(?:\s*(?:元|塊|支出|ex))(?:\s|$)/i);
         if (expMatch){
-            var numStr = expMatch[1] || expMatch[2];
-            var num3 = parseFloat(numStr.replace(/,/g, ''));
-            if (!isNaN(num3)) expense += num3;
+            var numStr = expMatch[1] || expMatch[2]; // 取匹配到的第一個數字
+            var num = parseFloat(numStr.replace(/,/g, ''));
+            if (!isNaN(num)) expense += num;
         }
       }
       return { income: parseFloat(income.toFixed(2)), expense: parseFloat(expense.toFixed(2)) };
     }
 
-    // 當日記帳明細
+    
+    
+    // ===== 記帳功能 =====
     function loadAccounting(iso){
       try {
         return JSON.parse(localStorage.getItem('accounting:' + iso) || 'null') || [];
@@ -245,7 +460,7 @@ body { background:#1a1b1e; color:#eee; }
         return [];
       }
     }
-
+    
     function saveAccounting(iso, entries){
       if (entries.length > 0){
         localStorage.setItem('accounting:' + iso, JSON.stringify(entries));
@@ -253,38 +468,52 @@ body { background:#1a1b1e; color:#eee; }
         localStorage.removeItem('accounting:' + iso);
       }
     }
-
+    
     function parseAccounting(text){
       var lines = text.split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean);
       var entries = [];
-
+      
       for (var i=0; i<lines.length; i++){
         var line = lines[i];
+        
+        // 匹配：買XXX N元、XXX N元、買XXX $N
         var match = line.match(/(?:買|購買)?(.+?)(\d+)(?:元|\$)/);
         if (match){
           var name = match[1].trim();
           var amount = parseFloat(match[2]);
+          
           if (name && !isNaN(amount) && amount > 0){
+            // 排除收支格式（+1000、-500、收入、支出）
             if (!/^[\+\-]/.test(name) && !/收入|支出|in|ex/i.test(name)){
-              entries.push({ name: name, amount: amount, timestamp: Date.now() });
+              entries.push({
+                name: name,
+                amount: amount,
+                timestamp: Date.now()
+              });
             }
           }
         }
       }
+      
       return entries;
     }
-
+    
     function renderAccountingDetails(){
       if (!state.currentISO || !accountingDetailsDiv) return;
+      
       var entries = loadAccounting(state.currentISO);
+      
       if (entries.length === 0){
         accountingDetailsDiv.style.display = 'none';
         return;
       }
+      
       accountingDetailsDiv.style.display = 'block';
+      
       var total = 0;
       var html = '<div class="sectionTitle">📝 當日記帳明細</div>';
       html += '<div class="chips" style="margin-top:.5rem">';
+      
       entries.forEach(function(entry, index){
         total += entry.amount;
         html += '<div class="chip">';
@@ -292,12 +521,16 @@ body { background:#1a1b1e; color:#eee; }
         html += '<button data-index="' + index + '">×</button>';
         html += '</div>';
       });
+      
       html += '</div>';
       html += '<div class="row" style="margin-top:.5rem"><span class="sectionTitle">總計：$' + total.toFixed(0) + '</span></div>';
+      
       accountingDetailsDiv.innerHTML = html;
+      
+      // 綁定刪除事件
       accountingDetailsDiv.querySelectorAll('button[data-index]').forEach(function(btn){
         btn.addEventListener('click', function(){
-          var index = parseInt(btn.dataset.index,10);
+          var index = parseInt(btn.dataset.index);
           entries.splice(index, 1);
           saveAccounting(state.currentISO, entries);
           renderAccountingDetails();
@@ -305,15 +538,17 @@ body { background:#1a1b1e; color:#eee; }
         });
       });
     }
-
-    // 期間統計
+    
     function addDays(dt, n){ var d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()); d.setDate(d.getDate()+n); return d; }
 
+    // 計算日期範圍的總收支
     function calculateSummary(start, end){
       var totalIncome = 0;
       var totalExpense = 0;
+      
       var cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-      var endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      var endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate()); // 確保是日期對象
+
       while (cur <= endDate){
         var iso = isoFromDate(cur);
         var amounts = loadAmounts(iso);
@@ -321,16 +556,18 @@ body { background:#1a1b1e; color:#eee; }
         totalExpense += amounts.expense;
         cur.setDate(cur.getDate() + 1);
       }
+      
       return { income: parseFloat(totalIncome.toFixed(2)), expense: parseFloat(totalExpense.toFixed(2)) };
     }
-
+    
+    // 使用新 helper 計算月度總收支
     function getMonthSummary(y, m){
       var firstDay = new Date(y, m, 1);
       var lastDay = new Date(y, m + 1, 0);
       return calculateSummary(firstDay, lastDay);
     }
-
-    // ===== IME Guard & Autosave =====
+    
+    // ===== IME guard & Debounced routing =====
     var isComposing = false;
     textNote.addEventListener('compositionstart', function(){ isComposing = true; });
     textNote.addEventListener('compositionupdate', function(){ isComposing = true; });
@@ -346,15 +583,13 @@ body { background:#1a1b1e; color:#eee; }
       }, wait);
     }
 
-    function autoSave(){
-      scheduleRoute(300);
-    }
-
     function copyAndSave(fullText){
       copyDatedClauses(fullText);
       var text = (textNote.value || '').trim();
+      
       var amounts = parseAmounts(text);
       var accounting = parseAccounting(text);
+      
       if (!text && amounts.income === 0 && amounts.expense === 0){ 
         localStorage.removeItem('note:' + state.currentISO);
         localStorage.removeItem('amounts:' + state.currentISO); 
@@ -363,6 +598,7 @@ body { background:#1a1b1e; color:#eee; }
       } else {
         saveNote(state.currentISO, { text:text });
         setIndex(state.currentISO, true);
+        
         if (amounts.income > 0 || amounts.expense > 0) {
           localStorage.setItem('amounts:' + state.currentISO, JSON.stringify(amounts));
           setAmountIndex(state.currentISO, true);
@@ -371,12 +607,14 @@ body { background:#1a1b1e; color:#eee; }
           setAmountIndex(state.currentISO, false);
         }
       }
+      
       saveAccounting(state.currentISO, accounting);
       renderCalendar();
       renderAccountingDetails();
     }
+    // ... (end of copyAndSave and utility functions) ...
 
-    // ===== 日期與時間解析 =====
+    // ===== Parsing & normalization (保持不變) =====
     function splitClauses(text){
       var parts = text.split(/\n|。|；|;|\r/g);
       var out = [];
@@ -422,18 +660,18 @@ body { background:#1a1b1e; color:#eee; }
       var s = normalizeFW(raw).trim();
       if (!s) return null;
       if (/^(今天|今日)(.*)$/.test(s)) { var t=s.match(/^(今天|今日)(.*)$/); return { iso: isoFromDate(now), tail:(t[2]||'').trim() }; }
-      if (/^(明天|翌日|隔天)(.*)$/.test(s)) { var t2=s.match(/^(明天|翌日|隔天)(.*)$/); var d2=addDays(now,1); return { iso: isoFromDate(d2), tail:(t2[2]||'').trim() }; }
-      if (/^(後天)(.*)$/.test(s)) { var t3=s.match(/^(後天)(.*)$/); var d3=addDays(now,2); return { iso: isoFromDate(d3), tail:(t3[2]||'').trim() }; }
+      if (/^(明天|翌日|隔天)(.*)$/.test(s)) { var t=s.match(/^(明天|翌日|隔天)(.*)$/); var d=addDays(now,1); return { iso: isoFromDate(d), tail:(t[2]||'').trim() }; }
+      if (/^(後天)(.*)$/.test(s)) { var t=s.match(/^(後天)(.*)$/); var d2=addDays(now,2); return { iso: isoFromDate(d2), tail:(t[2]||'').trim() }; }
       var m1 = s.match(/^(20\d{2})[\/\-.](\d{1,2})[\/\-.](\d{1,2})(.*)$/);
-      if (m1){ var y=parseInt(m1[1],10), mo=parseInt(m1[2],10), d=parseInt(m1[3],10); if (mo>=1&&mo<=12&&d>=1&&d<=31) return { iso: isoOf(y, mo-1, d), tail:(m1[4]||'').trim() }; }
+      if (m1){ var y=parseInt(m1[1]), mo=parseInt(m1[2]), d=parseInt(m1[3]); if (mo>=1&&mo<=12&&d>=1&&d<=31) return { iso: isoOf(y, mo-1, d), tail:(m1[4]||'').trim() }; }
       var m2 = s.match(/^(\d{1,2})[\/\-.](\d{1,2})(.*)$/);
-      if (m2){ var mo2=parseInt(m2[1],10), d4=parseInt(m2[2],10); if (mo2>=1&&mo2<=12&&d4>=1&&d4<=31) return { iso: isoOf(now.getFullYear(), mo2-1, d4), tail:(m2[3]||'').trim() }; }
+      if (m2){ var mo2=parseInt(m2[1]), d2=parseInt(m2[2]); if (mo2>=1&&mo2<=12&&d2>=1&&d2<=31) return { iso: isoOf(now.getFullYear(), mo2-1, d2), tail:(m2[3]||'').trim() }; }
       var m3 = s.match(/^(\d{1,2})月(\d{1,2})[日號](.*)$/);
-      if (m3){ var mo3=parseInt(m3[1],10), d5=parseInt(m3[2],10); if (mo3>=1&&d5>=1&&mo3<=12&&d5<=31) return { iso: isoOf(now.getFullYear(), mo3-1, d5), tail:(m3[3]||'').trim() }; }
+      if (m3){ var mo3=parseInt(m3[1]), d3=parseInt(m3[2]); if (mo3>=1&&d3>=1&&mo3<=12&&d3<=31) return { iso: isoOf(now.getFullYear(), mo3-1, d3), tail:(m3[3]||'').trim() }; }
       var m4 = s.match(/^(\d{1,2})[日號](.*)$/);
-      if (m4){ var d6=parseInt(m4[1],10); if (d6>=1&&d6<=31) return { iso: isoOf(now.getFullYear(), now.getMonth(), d6), tail:(m4[2]||'').trim() }; }
+      if (m4){ var d4=parseInt(m4[1]); if (d4>=1&&d4<=31) return { iso: isoOf(now.getFullYear(), now.getMonth(), d4), tail:(m4[2]||'').trim() }; }
       var m5 = s.match(/^(下個?月|下月)(\d{1,2})[日號](.*)$/);
-      if (m5){ var d7=parseInt(m5[2],10); var nd = nextMonthDate(now, d7); return { iso: isoFromDate(nd), tail:(m5[3]||'').trim() }; }
+      if (m5){ var d5=parseInt(m5[2]); var nd = nextMonthDate(now, d5); return { iso: isoFromDate(nd), tail:(m5[3]||'').trim() }; }
       var m6 = s.match(/^(本週|這週|這周|下週|下周)?(週|星期|禮拜)([日天一二三四五六])(.*)$/);
       if (m6){
         var scope = m6[1]||''; var dowC = m6[3]; var rest = (m6[4]||'').trim();
@@ -530,7 +768,7 @@ body { background:#1a1b1e; color:#eee; }
         var fingerprint = 'v86|' + display;
         if (bag.indexOf(fingerprint) < 0){
           var note = loadNote(targetISO);
-          var newText = (note.text ? (note.text + "\n") : '') + display;
+          var newText = (note.text ? (note.text + '\n') : '') + display;
           saveNote(targetISO, { text: newText });
           setIndex(targetISO, true);
           bag.push(fingerprint);
@@ -539,7 +777,7 @@ body { background:#1a1b1e; color:#eee; }
       }
     }
 
-    // 預覽
+    // ===== Preview (3 items, time-sorted, exclude dated directives) =====
     function normalizeFWLine(line){ return normalizeFW(line||'').trim(); }
     function isDatedLine(line){
       var s = normalizeFWLine(line);
@@ -562,6 +800,7 @@ body { background:#1a1b1e; color:#eee; }
       if (note && note.text){
         lines = note.text.split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean);
       }
+      // dedupe
       var seen = {}; var uniq = [];
       for (var i=0;i<lines.length;i++){ var k=lines[i]; if (!seen[k]){ seen[k]=1; uniq.push(k);} }
       var withTime = [], withoutTime = [];
@@ -572,17 +811,20 @@ body { background:#1a1b1e; color:#eee; }
       }
       withTime.sort(function(a,b){ return a.mins - b.mins; });
       var ordered = withTime.map(function(x){ return x.line; }).concat(withoutTime);
+      // 【修正 1 確保】過濾掉金額相關的語句 (確保日曆中不顯示每日收支細節內容)
       var filtered = ordered.filter(function(line){
           var normLine = normalizeFW(line);
-          if (/^[\+\-]\d+/.test(normLine.trim())) return false;
-          if (/(?:收入|支出|in|ex)/i.test(normLine)) return false;
-          if (/——.*《.*》/.test(line)) return false;
+          // 過濾收支格式：+1000、-500、收入1000、支出500等
+          if (/^[\+\-]\d+/.test(normLine.trim())) return false; // 過濾 +1000、-500
+          if (/(?:收入|支出|in|ex)/i.test(normLine)) return false; // 過濾包含收入/支出關鍵字
+          // 過濾唐詩格式：包含 —— 和《》的行
+          if (/——.*《.*》/.test(line)) return false; // 過濾唐詩
           return true;
       });
       return filtered.slice(0, maxLines);
     }
 
-    // ===== 月曆渲染 =====
+    // ===== Calendar render (修正週累計邏輯) =====
     function renderCalendar(){
       var first = new Date(state.y, state.m, 1);
       var startDay = first.getDay();
@@ -598,25 +840,32 @@ body { background:#1a1b1e; color:#eee; }
 
       for (var d=1; d<=days; d++){
         var iso = isoOf(state.y, state.m, d);
+
         var cell = document.createElement('div');
         cell.className = 'cell';
         cell.dataset.iso = iso;
         if (iso === todayISO) cell.classList.add('today');
         if (state.currentISO === iso) cell.classList.add('selected');
-
-        // 在週日顯示前一週淨額（絕對值藍色）
+        
+        // 【修正 2】在週日顯示前一週 (上週日到上週六) 的淨額總和 (只顯示絕對值，統一藍色)
         var currentDate = new Date(state.y, state.m, d);
-        if (currentDate.getDay() === 0) {
-          var previousSunday = addDays(currentDate, -7);
-          var previousSaturday = addDays(currentDate, -1);
+        if (currentDate.getDay() === 0) { // 0=日
+          var previousSunday = addDays(currentDate, -7); // 上週日 (前一週的開始)
+          var previousSaturday = addDays(currentDate, -1); // 上週六 (前一週的結束)
+          
           var weekSummary = calculateSummary(previousSunday, previousSaturday); 
+          
           var weekNet = weekSummary.income - weekSummary.expense;
+
           if (weekSummary.income !== 0 || weekSummary.expense !== 0) {
-            var netDisplay = Math.abs(weekNet).toLocaleString();
-            var netColor = 'var(--amount)';
+            // 修正: 僅顯示淨額的絕對值數字，不帶正負號，藍色，且移除標籤
+            var netDisplay = Math.abs(weekNet).toLocaleString(); // 絕對值，不顯示正負號
+            var netColor = 'var(--amount)'; // 始終使用藍色
+            
             var summaryHtml = '<div class="preview" style="color:' + netColor + '; font-weight:700; text-align:center; padding-top:2px; font-size:.9rem;">' +
-                              netDisplay +
+                              netDisplay + // <-- 僅顯示數字
                               '</div>';
+            
             cell.insertAdjacentHTML('beforeend', summaryHtml);
           }
         }
@@ -625,28 +874,33 @@ body { background:#1a1b1e; color:#eee; }
         var numWrap = document.createElement('div');
         numWrap.className = 'day-num';
         numWrap.textContent = String(d);
-
+        
+        // 檢查是否有收支或記帳數據，顯示藍色點
         var amounts = loadAmounts(iso);
         var accounting = loadAccounting(iso);
         var hasAmount = amounts.income > 0 || amounts.expense > 0 || accounting.length > 0;
+        
+        // 檢查是否有文字內容（預約/行程），顯示紅色點
         var note = loadNote(iso);
         var hasNote = note.text && note.text.trim().length > 0;
 
         if (hasAmount){
           var dot = document.createElement('span');
-          dot.className = 'amount-dot';
+          dot.className = 'amount-dot'; // 藍色收支點
           numWrap.appendChild(dot);
         }
+        
         if (hasNote){
           var redDot = document.createElement('span');
-          redDot.className = 'note-dot';
+          redDot.className = 'note-dot'; // 紅色預約點
           numWrap.appendChild(redDot);
         }
-
+        
         header.appendChild(numWrap);
         header.appendChild(document.createElement('div'));
         cell.appendChild(header);
 
+        // 顯示筆記預覽 (已過濾收支金額的邏輯，符合要求 1)
         var previews = previewLinesForISO(iso, 3);
         for (var i2=0;i2<previews.length;i2++){
           var pv = document.createElement('div');
@@ -673,16 +927,19 @@ body { background:#1a1b1e; color:#eee; }
       var note = loadNote(iso);
       textNote.value = note.text || '';
       renderAccountingDetails();
-
-      // 今天且星期日且空白 → 自動插入唐詩
+      
+      // 如果是星期日且文字欄為空，插入唐詩（只在當天才插入）
       var date = new Date(iso);
       var today = new Date();
-      today.setHours(0, 0, 0, 0);
+      today.setHours(0, 0, 0, 0); // 設定為當天的 00:00:00
       var clickedDate = new Date(date);
       clickedDate.setHours(0, 0, 0, 0);
+      
+      // 只有在點擊的日期是今天，且是星期日，且文字欄為空時，才插入唐詩
       if (clickedDate.getTime() === today.getTime() && date.getDay() === 0 && !note.text) {
         insertPoem();
       }
+      
       textNote.focus();
     }
 
@@ -693,6 +950,7 @@ body { background:#1a1b1e; color:#eee; }
       state.m++; if (state.m > 11){ state.m = 0; state.y++; } renderCalendar();
     });
 
+    // Input events
     textNote.addEventListener('input', function(){
       if (isComposing) return;
       scheduleRoute(700);
@@ -705,7 +963,7 @@ body { background:#1a1b1e; color:#eee; }
       scheduleRoute(0);
     });
 
-    // ===== 匯出 PDF （列印） =====
+    // Export to PDF
     exportBtn.addEventListener('click', function(){
       if (!state.currentISO) return;
       var note = loadNote(state.currentISO);
@@ -713,18 +971,16 @@ body { background:#1a1b1e; color:#eee; }
       if (!win) { alert('請允許彈出視窗以匯出 PDF。'); return; }
       var noteText = note.text || '';
       var amounts = loadAmounts(state.currentISO);
+      
       var amountSummary = '';
       if (amounts.income > 0 || amounts.expense > 0) {
-          amountSummary = "\n\n--- 📅 收支總計 ---\n收入: " + amounts.income.toLocaleString() + "\n支出: " + amounts.expense.toLocaleString() + "\n---";
+          amountSummary = '\n\n--- 📅 收支總計 ---\n收入: ' + amounts.income.toLocaleString() + '\n支出: ' + amounts.expense.toLocaleString() + '\n---';
       }
 
       var title = '每日筆記 ' + state.currentISO;
       var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+title+'</title>' +
-                 '<style>body{font-family:-apple-system,BlinkMacSystemFont,Roboto,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;margin:24px;line-height:1.6}h1{font-size:18px;margin:0 0 12px}p{white-space:pre-wrap}</style>' +
-                 '<style>
-/* Dark Theme Injected */
-body { background:#1a1b1e; color:#eee; }
-</style></head><body>' +
+                 '<style>body{font-family:-apple-system,BlinkMacSystemFont,Roboto,\"Noto Sans TC\",\"PingFang TC\",\"Microsoft JhengHei",sans-serif;margin:24px;line-height:1.6}h1{font-size:18px;margin:0 0 12px}p{white-space:pre-wrap}</style>' +
+                 '</head><body>' +
                  '<h1>'+title+'</h1>' +
                  '<p>' + escapeHtml(noteText + amountSummary) + '</p>' +
                  '<script>setTimeout(function(){window.print()}, 300);<\/script>' +
@@ -740,12 +996,12 @@ body { background:#1a1b1e; color:#eee; }
       });
     }
 
-    // 安裝提示
+    // Install helper
     installBtn.addEventListener('click', function(){
-      alert('在 iPad 的 Safari 點「分享」→「加入主畫面」即可安裝。');
+      alert('在 iPad 的 Safari 以「分享」→「加入主畫面」即可安裝。');
     });
 
-    // ===== 「每週活動安排」 Popover =====
+    // ===== "每週活動安排" popover (multi-date + date-range) (保持不變) =====
     openPlanBtn.addEventListener('click', function(){
       var rect = openPlanBtn.getBoundingClientRect();
       var bodyRect = document.body.getBoundingClientRect();
@@ -754,7 +1010,7 @@ body { background:#1a1b1e; color:#eee; }
       buildPlanPop();
       planPop.style.display = 'block';
     });
-
+    
     function buildPlanPop(){
       var today = new Date();
       var yyyy = today.getFullYear(), mm = pad2(today.getMonth()+1), dd = pad2(today.getDate());
@@ -821,24 +1077,45 @@ body { background:#1a1b1e; color:#eee; }
         var text = (document.getElementById('mdText').value||'').trim();
         if (!text || pickSet.size===0){ planPop.style.display='none'; return; }
         var ordered = Array.from(pickSet).sort();
+        
+        // 直接儲存到目標日期，不插入到當前文字欄
         ordered.forEach(function(iso){
           var note = loadNote(iso);
+          // 在文字欄第一排插入行程
           if (note.text) {
-            note.text = text + "\n" + note.text;
+            note.text = text + '\n' + note.text;
           } else {
             note.text = text;
           }
           saveNote(iso, note);
           setIndex(iso, true);
         });
+        
         planPop.style.display='none';
+        
+        // 跳轉到第一個目標日期
         var firstISO = ordered[0];
         openNote(firstISO);
         renderCalendar();
       };
     }
 
-    // ===== 「收支報表」 Popover =====
+    function insertLinesAtCursor(lines){
+      var el = textNote;
+      var start = el.selectionStart, end = el.selectionEnd;
+      var txt = el.value;
+      var before = txt.slice(0,start);
+      var after  = txt.slice(end);
+      var block = lines.join('\n');
+      var sepBefore = (before.length && before[before.length-1] !== '\n') ? '\n' : '';
+      var sepAfter = (after.length && after[0] !== '\n') ? '\n' : '';
+      el.value = before + sepBefore + block + sepAfter + after;
+      el.focus();
+      el.selectionStart = el.selectionEnd = (before + sepBefore + block).length;
+    }
+
+
+    // ===== "收支報表" popover (保持報表邏輯不變) =====
     openReportBtn.addEventListener('click', function(){
       var rect = openReportBtn.getBoundingClientRect();
       var bodyRect = document.body.getBoundingClientRect();
@@ -850,8 +1127,11 @@ body { background:#1a1b1e; color:#eee; }
 
     function buildReportPop(){
       var html = '<div class="row"><span class="sectionTitle">📊 ' + state.y + '年 ' + (state.m+1) + '月 收支報表</span></div>';
-      var monthSummary = getMonthSummary(state.y, state.m);
+      
+      // 1. 月度總計
+      var monthSummary = getMonthSummary(state.y, state.m); // 使用修正後的 getMonthSummary
       var monthNet = monthSummary.income - monthSummary.expense;
+      
       html += '<div class="row" style="margin-top:.7rem; align-items:flex-start">'
             +   '<span class="sectionTitle" style="width:60px; flex-shrink:0">月總結</span>'
             +   '<div style="flex:1">'
@@ -860,29 +1140,45 @@ body { background:#1a1b1e; color:#eee; }
             +     '<div class="chip" style="background:#e0f2f1; color:' + (monthNet >= 0 ? 'green' : 'var(--danger)') + '">淨額: ' + monthNet.toLocaleString() + '</div>'
             +   '</div>'
             + '</div>';
+      
+      // 2. 每週報表
       html += '<div class="row" style="margin-top:.7rem"><span class="sectionTitle">每週細項 (週日到週六)</span></div>';
-
+      
       var lastDayOfMonth = new Date(state.y, state.m + 1, 0);
       var firstDayOfMonth = new Date(state.y, state.m, 1);
       var weeks = [];
       var cur = new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), firstDayOfMonth.getDate());
+      
+      // 找到當月第一天所在的週日
       var startWeek = addDays(cur, -cur.getDay());
+      
       var weekStart = new Date(startWeek);
-
+      
       while (weekStart <= lastDayOfMonth || weekStart.getMonth() === state.m || weekStart.getDay() !== 0){
           var weekEnd = new Date(weekStart);
           var isLastDay = isoFromDate(weekStart) === isoFromDate(lastDayOfMonth);
-          if (weekStart.getDay() === 6 || isLastDay){
+
+          if (weekStart.getDay() === 6 || isLastDay){ // 週六或當月最後一天結束
+              
               var weekBegin = addDays(weekEnd, -6);
+              
+              // 確保週起始日不超過當月第一天
               if (weekBegin < firstDayOfMonth && weekStart >= firstDayOfMonth) {
                   weekBegin = firstDayOfMonth; 
               } else if (weekBegin.getMonth() !== weekStart.getMonth() && weekStart.getMonth() === state.m) {
+                  // 如果週開始日在上個月，且週結束日在這個月，則從這個月的第一天開始計算
                   weekBegin = firstDayOfMonth; 
               } else if (weekStart.getMonth() !== state.m) {
+                  // 忽略跨越到下個月的日期
+                  // 如果 weekStart已經是下個月，並且它不是從本月開始計算的，則跳出循環
                   if (weekBegin.getMonth() !== state.m) break;
               }
+
+
               var weekSummary = calculateSummary(weekBegin, weekEnd);
+
               var weekNet = weekSummary.income - weekSummary.expense;
+              
               weeks.push({
                   start: weekBegin,
                   end: weekEnd,
@@ -891,8 +1187,10 @@ body { background:#1a1b1e; color:#eee; }
                   net: weekNet
               });
           }
-          weekStart.setDate(weekStart.getDate() + 1);
-          if(weekStart > addDays(lastDayOfMonth, 6)) break;
+
+          weekStart.setDate(weekStart.getDate() + 1); // 移到下一天
+
+          if(weekStart > addDays(lastDayOfMonth, 6)) break; // 防止無限循環
       }
 
       html += '<table style="width:100%; border-collapse:collapse; font-size:.9rem; margin-top:.5rem">'
@@ -902,12 +1200,13 @@ body { background:#1a1b1e; color:#eee; }
             +     '<th style="border:1px solid var(--border); padding:.4rem">支出</th>'
             +     '<th style="border:1px solid var(--border); padding:.4rem">淨額</th>'
             +   '</tr></thead><tbody>';
-
+      
       weeks.forEach(function(w){
           var startM = w.start.getMonth()+1, startD = w.start.getDate();
           var endM = w.end.getMonth()+1, endD = w.end.getDate();
           var startStr = (w.start.getFullYear() !== state.y) ? w.start.getFullYear() + '/' : '';
           var endStr = (w.end.getFullYear() !== state.y) ? w.end.getFullYear() + '/' : '';
+
           html += '<tr>'
                 +   '<td style="border:1px solid var(--border); padding:.4rem">' + startStr + startM + '/' + startD + ' - ' + endStr + endM + '/' + endD + '</td>'
                 +   '<td style="border:1px solid var(--border); padding:.4rem; text-align:right; color:var(--primary)">' + w.income.toLocaleString() + '</td>'
@@ -915,17 +1214,26 @@ body { background:#1a1b1e; color:#eee; }
                 +   '<td style="border:1px solid var(--border); padding:.4rem; text-align:right; font-weight:700; color:' + (w.net >= 0 ? 'green' : 'var(--danger)') + '">' + w.net.toLocaleString() + '</td>'
                 + '</tr>';
       });
+      
       html += '</tbody></table>';
+      
       html += '<div class="row" style="justify-content:flex-end; gap:.5rem; margin-top:1rem"><button id="rpClose" class="ghost">關閉</button></div>';
+
       reportPop.innerHTML = html;
       document.getElementById('rpClose').onclick = function(){ reportPop.style.display='none'; };
     }
 
-    // ===== 「我的筆記」功能 =====
+
+    
+    
+    // ===== 我的筆記功能 =====
+    var openMyNotesBtn = document.getElementById('openMyNotes');
+    var myNotesPop = document.getElementById('myNotesPop');
     var currentEditingNoteId = null;
     var speechRecognition = null;
     var speechSynthesisUtterance = null;
-
+    
+    // 載入所有筆記
     function loadMyNotes(){
       try {
         return JSON.parse(localStorage.getItem('myNotes') || '[]');
@@ -933,25 +1241,29 @@ body { background:#1a1b1e; color:#eee; }
         return [];
       }
     }
-
+    
+    // 儲存所有筆記
     function saveMyNotes(notes){
       localStorage.setItem('myNotes', JSON.stringify(notes));
     }
-
+    
+    // 開啟筆記視窗
     openMyNotesBtn.onclick = function(){
       showNotesList();
       myNotesPop.style.display = 'block';
     };
-
+    
+    // 顯示筆記列表
     function showNotesList(){
       var notes = loadMyNotes();
       var html = '<div class="sectionTitle">📝 我的筆記</div>';
       html += '<div class="row" style="margin-top:1rem"><button id="mnNew">➕ 新增筆記</button><button id="mnClose" class="ghost">關閉</button></div>';
+      
       if (notes.length === 0){
         html += '<div style="text-align:center; padding:3rem; color:var(--muted)">尚無筆記，點擊「新增筆記」開始</div>';
       } else {
         html += '<div style="margin-top:1rem; display:grid; gap:.75rem">';
-        notes.forEach(function(note){
+        notes.forEach(function(note, index){
           var date = new Date(note.created);
           var dateStr = date.getFullYear() + '/' + (date.getMonth()+1) + '/' + date.getDate() + ' ' + date.getHours() + ':' + String(date.getMinutes()).padStart(2,'0');
           var preview = note.content.substring(0, 80);
@@ -965,9 +1277,13 @@ body { background:#1a1b1e; color:#eee; }
         });
         html += '</div>';
       }
+      
       myNotesPop.innerHTML = html;
+      
       document.getElementById('mnNew').onclick = function(){ createNewNote(); };
       document.getElementById('mnClose').onclick = function(){ myNotesPop.style.display='none'; };
+      
+      // 綁定筆記點擊事件
       myNotesPop.querySelectorAll('[data-note-id]').forEach(function(card){
         card.onclick = function(){
           var noteId = card.getAttribute('data-note-id');
@@ -975,7 +1291,8 @@ body { background:#1a1b1e; color:#eee; }
         };
       });
     }
-
+    
+    // 建立新筆記
     function createNewNote(){
       var notes = loadMyNotes();
       var newNote = {
@@ -989,13 +1306,14 @@ body { background:#1a1b1e; color:#eee; }
       saveMyNotes(notes);
       openNoteEditor(newNote.id);
     }
-
+    
+    // 開啟筆記編輯器
     function openNoteEditor(noteId){
       currentEditingNoteId = noteId;
       var notes = loadMyNotes();
       var note = notes.find(function(n){ return n.id === noteId; });
       if (!note) return;
-
+      
       var html = '<div class="sectionTitle">✒️ 編輯筆記</div>';
       html += '<div class="row" style="margin-top:1rem; flex-wrap:wrap">';
       html += '<button id="mnSave">💾 儲存</button>';
@@ -1003,6 +1321,7 @@ body { background:#1a1b1e; color:#eee; }
       html += '<button id="mnRead">🔊 朗讀文章</button>';
       html += '<button id="mnImport">📅 匯入</button>';
       html += '<button id="mnExport">📄 匯出</button>';
+      html += '<button id="mnDrawing" style="background:var(--primary); color:white">✍️ 手寫模式</button>';
       html += '<button id="mnDelete" style="color:var(--danger)">🗑️ 刪除</button>';
       html += '<button id="mnBack" class="ghost">← 返回列表</button>';
       html += '</div>';
@@ -1012,7 +1331,27 @@ body { background:#1a1b1e; color:#eee; }
       html += '</div>';
       html += '<input type="text" id="mnTitle" placeholder="筆記標題" value="' + (note.title || '') + '" style="width:100%; padding:.75rem; border:1px solid var(--border); border-radius:.5rem; font-size:1.1rem; font-weight:700; margin-top:1rem" />';
       html += '<textarea id="mnContent" placeholder="開始輸入您的筆記內容..." style="width:100%; min-height:400px; padding:.75rem; border:1px solid var(--border); border-radius:.5rem; font-size:1rem; line-height:1.6; resize:vertical; margin-top:1rem">' + (note.content || '') + '</textarea>';
+      html += '<div id="mnPreview" style="width:100%; min-height:200px; padding:.75rem; border:2px solid #e0e0e0; border-radius:.5rem; background:#f9f9f9; margin-top:1rem; line-height:1.6; font-size:1rem"></div>';
+      
+      // 手寫板區域（保留為空，改用浮動視窗）
+      html += '<div id="drawingArea" style="display:none"></div>';
+      
+      // 在筆記內容下方顯示手寫預覽
+      html += '<div id="drawingPreview" style="margin-top:1rem"></div>';
+      
       myNotesPop.innerHTML = html;
+      
+      // 初始化預覽區域
+      setTimeout(function(){
+        updatePreview();
+        
+        // 繫定 textarea 輸入事件，即時更新預覽
+        var textarea = document.getElementById('mnContent');
+        if (textarea){
+          textarea.addEventListener('input', updatePreview);
+        }
+      }, 100);
+      
       document.getElementById('mnSave').onclick = function(){ saveCurrentNote(); };
       document.getElementById('mnVoice').onclick = function(){ toggleVoiceRecording(); };
       document.getElementById('mnRead').onclick = function(){ toggleReadAloud(); };
@@ -1020,147 +1359,619 @@ body { background:#1a1b1e; color:#eee; }
       document.getElementById('mnExport').onclick = function(){ exportNote(); };
       document.getElementById('mnDelete').onclick = function(){ deleteCurrentNote(); };
       document.getElementById('mnBack').onclick = function(){ showNotesList(); };
+      document.getElementById('mnDrawing').onclick = function(){ toggleDrawingMode(); };
+      
+      // 初始化手寫板（如果有儲存的手寫內容）
+      if (note.drawing){
+        var preview = document.getElementById('drawingPreview');
+        preview.innerHTML = '<div style="padding:.5rem; background:white; border:1px solid var(--border); border-radius:.5rem"><img src="' + note.drawing + '" style="max-width:100%; height:auto; border-radius:.25rem" /></div>';
+      }
     }
-
+    
+    // 儲存當前筆記
     function saveCurrentNote(){
       if (!currentEditingNoteId) return;
       var notes = loadMyNotes();
       var note = notes.find(function(n){ return n.id === currentEditingNoteId; });
       if (!note) return;
+      
       note.title = document.getElementById('mnTitle').value;
       note.content = document.getElementById('mnContent').value;
       note.modified = new Date().toISOString();
+      
       saveMyNotes(notes);
       alert('筆記已儲存');
     }
-
-    // 語音：Safari 不支援時只提示
+    
+    // 語音記錄
     function toggleVoiceRecording(){
-      var hasRecognition = ('webkitSpeechRecognition' in window) || ('SpeechRecognition' in window);
-      if (!hasRecognition){
-        alert('目前此瀏覽器（包含 iPad Safari）尚未支援語音辨識功能，\n但不影響其他日曆和筆記功能使用。');
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)){
+        alert('您的瀏覽器不支援語音辨識功能，請使用 Chrome 或 Edge 瀏覽器');
         return;
       }
+      
       if (speechRecognition && speechRecognition.started){
         speechRecognition.stop();
         return;
       }
+      
       var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       speechRecognition = new SpeechRecognition();
       speechRecognition.lang = 'zh-TW';
       speechRecognition.continuous = true;
       speechRecognition.interimResults = true;
+      
+      // 記錄原始內容長度，用於即時顯示
+      var originalLength = 0;
+      
       speechRecognition.onstart = function(){
         speechRecognition.started = true;
-        var ind = document.getElementById('recordingIndicator');
-        if (ind) ind.style.display = 'block';
-        var btn = document.getElementById('mnVoice');
-        if (btn) btn.textContent = '⏹️ 停止錄音';
-      };
-      speechRecognition.onresult = function(event){
-        var transcript = '';
-        for (var i = event.resultIndex; i < event.results.length; i++){
-          transcript += event.results[i][0].transcript;
-        }
+        document.getElementById('recordingIndicator').style.display = 'block';
+        document.getElementById('mnVoice').textContent = '⏹️ 停止錄音';
+        // 記錄開始錄音時的內容長度
         var textarea = document.getElementById('mnContent');
-        if (textarea){
-          textarea.value += transcript;
+        if (textarea) {
+          originalLength = textarea.value.length;
         }
       };
-      speechRecognition.onend = speechRecognition.onerror = function(){
+      
+      speechRecognition.onresult = function(event){
+        var textarea = document.getElementById('mnContent');
+        if (!textarea) return;
+        
+        // 分別處理最終結果和臨時結果
+        var finalTranscript = '';
+        var interimTranscript = '';
+        
+        for (var i = 0; i < event.results.length; i++){
+          var transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal){
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        
+        // 如果有最終結果，附加到原始內容後面
+        if (finalTranscript){
+          // 移除之前的臨時內容
+          textarea.value = textarea.value.substring(0, originalLength);
+          // 附加最終結果
+          textarea.value += finalTranscript;
+          // 更新原始長度
+          originalLength = textarea.value.length;
+        }
+        
+        // 即時顯示臨時結果（灰色文字效果）
+        if (interimTranscript){
+          // 移除之前的臨時內容
+          textarea.value = textarea.value.substring(0, originalLength);
+          // 附加新的臨時結果
+          textarea.value += interimTranscript;
+        }
+      };
+      
+      speechRecognition.onend = function(){
         speechRecognition.started = false;
         var indicator = document.getElementById('recordingIndicator');
         if (indicator) indicator.style.display = 'none';
         var btn = document.getElementById('mnVoice');
         if (btn) btn.textContent = '🎤 語音記錄';
       };
+      
+      speechRecognition.onerror = function(event){
+        console.error('語音辨識錯誤:', event.error);
+        speechRecognition.started = false;
+        var indicator = document.getElementById('recordingIndicator');
+        if (indicator) indicator.style.display = 'none';
+        var btn = document.getElementById('mnVoice');
+        if (btn) btn.textContent = '🎤 語音記錄';
+      };
+      
       speechRecognition.start();
     }
-
+    
+    // 朗讀文章
     function toggleReadAloud(){
       if (!window.speechSynthesis){
         alert('您的瀏覽器不支援語音合成功能');
         return;
       }
+      
       if (window.speechSynthesis.speaking){
         window.speechSynthesis.cancel();
-        var btn = document.getElementById('mnRead');
-        if (btn) btn.textContent = '🔊 朗讀文章';
+        document.getElementById('mnRead').textContent = '🔊 朗讀文章';
         return;
       }
+      
       var content = document.getElementById('mnContent').value;
       if (!content){
         alert('請先輸入內容');
         return;
       }
+      
       speechSynthesisUtterance = new SpeechSynthesisUtterance(content);
       speechSynthesisUtterance.lang = 'zh-TW';
       speechSynthesisUtterance.rate = 1.0;
       speechSynthesisUtterance.pitch = 1.0;
+      
       speechSynthesisUtterance.onstart = function(){
-        var btn = document.getElementById('mnRead');
-        if (btn) btn.textContent = '⏹️ 停止朗讀';
+        document.getElementById('mnRead').textContent = '⏹️ 停止朗讀';
       };
+      
       speechSynthesisUtterance.onend = function(){
-        var btn = document.getElementById('mnRead');
-        if (btn) btn.textContent = '🔊 朗讀文章';
+        document.getElementById('mnRead').textContent = '🔊 朗讀文章';
       };
+      
       window.speechSynthesis.speak(speechSynthesisUtterance);
     }
-
+    
+    // 匯入文章
     function importNote(){
-      var input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.txt,.md';
+      var input = document.getElementById('hiddenFileInput');
+      if (!input) {
+        // 如果找不到隱藏的 input，就動態建立一個
+        input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.txt,.md,.doc,.docx';
+      }
+      
+      // 清除之前的檔案選擇
+      input.value = '';
+      
       input.onchange = function(e){
         var file = e.target.files[0];
         if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function(event){
-          var content = event.target.result;
-          var area = document.getElementById('mnContent');
-          if (area){
-            area.value = content;
-          }
-          alert('檔案已匯入');
-        };
-        reader.readAsText(file);
+        
+        var fileName = file.name.toLowerCase();
+        var contentArea = document.getElementById('mnContent');
+        if (!contentArea) return;
+        
+        // 檢查檔案類型
+        if (fileName.endsWith('.docx')) {
+          // 處理 Word 檔案 (.docx)
+          var reader = new FileReader();
+          reader.onload = function(event){
+            var arrayBuffer = event.target.result;
+            
+            // 使用 mammoth.js 轉換 Word 文件
+            if (typeof mammoth !== 'undefined') {
+              mammoth.extractRawText({arrayBuffer: arrayBuffer})
+                .then(function(result){
+                  contentArea.value = result.value;
+                  alert('檔案已匯入');
+                })
+                .catch(function(err){
+                  console.error(err);
+                  alert('匯入 Word 檔案失敗：' + err.message);
+                });
+            } else {
+              alert('無法讀取 Word 檔案，請確保網路連線正常');
+            }
+          };
+          reader.readAsArrayBuffer(file);
+        } else if (fileName.endsWith('.doc')) {
+          // .doc 格式不支援，提示使用者轉換為 .docx
+          alert('不支援 .doc 格式，請將檔案轉換為 .docx 格式後再匯入');
+        } else {
+          // 處理文字檔案 (.txt, .md)
+          var reader = new FileReader();
+          reader.onload = function(event){
+            var content = event.target.result;
+            contentArea.value = content;
+            alert('檔案已匯入');
+          };
+          reader.readAsText(file);
+        }
       };
+      
       input.click();
     }
-
+    
+    // 匯出文章
     function exportNote(){
       var title = document.getElementById('mnTitle').value || '無標題';
       var content = document.getElementById('mnContent').value;
+      
       if (!content){
         alert('請先輸入內容');
         return;
       }
+      
       var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
       a.download = title + '.txt';
-      document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
-
+    
+    // 刪除當前筆記
     function deleteCurrentNote(){
       if (!currentEditingNoteId) return;
       if (!confirm('確定要刪除這篇筆記嗎？')) return;
+      
       var notes = loadMyNotes();
       notes = notes.filter(function(n){ return n.id !== currentEditingNoteId; });
       saveMyNotes(notes);
       showNotesList();
     }
-
-    // ===== 初始化 =====
+    
+    // ========== 手寫板功能 ==========
+    var drawingCanvas = null;
+    var drawingCtx = null;
+    var isDrawing = false;
+    var drawingTool = 'pen'; // 'pen' or 'eraser'
+    var drawingColor = '#000000';
+    var drawingSize = 5;
+    
+    // 切換手寫模式（開啟兩個浮動視窗）
+    function toggleDrawingMode(){
+      var floatingCanvas = document.getElementById('floatingCanvas');
+      var btn = document.getElementById('mnDrawing');
+      
+      if (!floatingCanvas.classList.contains('active')){
+        // 開啟手寫板浮動視窗
+        floatingCanvas.classList.add('active');
+        
+        // CSS 已設定置中，不需要 JavaScript 設定位置
+        
+        btn.textContent = '✔️ 手寫模式';
+        btn.style.background = '#10b981';
+        
+        initDrawingCanvas();
+        initFloatingDrag();
+      } else {
+        // 關閉手寫板浮動視窗
+        floatingCanvas.classList.remove('active');
+        btn.textContent = '✍️ 手寫模式';
+        btn.style.background = 'var(--primary)';
+      }
+    }
+    
+    // 初始化浮動視窗拖曳功能（支援兩個視窗）
+    function initFloatingDrag(){
+      // 手寫板視窗拖曳
+      initDragForWindow('floatingCanvas', 'canvasHeader');
+    }
+    
+    // 通用拖曳功能
+    function initDragForWindow(windowId, headerId){
+      var window = document.getElementById(windowId);
+      var header = document.getElementById(headerId);
+      if (!window || !header) return;
+      
+      var isDragging = false;
+      var currentX;
+      var currentY;
+      var initialX;
+      var initialY;
+      var xOffset = 0;
+      var yOffset = 0;
+      
+      // 移除舊的事件監聽（避免重複繫定）
+      header.onmousedown = dragStart;
+      
+      function dragStart(e){
+        if (e.target.tagName === 'BUTTON') return;
+        
+        initialX = e.clientX - xOffset;
+        initialY = e.clientY - yOffset;
+        
+        isDragging = true;
+        
+        document.onmousemove = drag;
+        document.onmouseup = dragEnd;
+      }
+      
+      function drag(e){
+        if (!isDragging) return;
+        
+        e.preventDefault();
+        
+        currentX = e.clientX - initialX;
+        currentY = e.clientY - initialY;
+        
+        xOffset = currentX;
+        yOffset = currentY;
+        
+        setTranslate(currentX, currentY, window);
+      }
+      
+      function dragEnd(e){
+        initialX = currentX;
+        initialY = currentY;
+        
+        isDragging = false;
+        
+        document.onmousemove = null;
+        document.onmouseup = null;
+      }
+      
+      function setTranslate(xPos, yPos, el){
+        el.style.transform = 'translate3d(' + xPos + 'px, ' + yPos + 'px, 0)';
+      }
+    }
+    
+    // 初始化手寫板
+    function initDrawingCanvas(){
+      drawingCanvas = document.getElementById('miniCanvas');
+      if (!drawingCanvas) return;
+      
+      drawingCtx = drawingCanvas.getContext('2d');
+      
+      // 設定畫布背景為白色
+      drawingCtx.fillStyle = 'white';
+      drawingCtx.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+      
+      // 載入已儲存的手寫內容
+      var notes = loadMyNotes();
+      var note = notes.find(function(n){ return n.id === currentEditingNoteId; });
+      if (note && note.drawing){
+        var img = new Image();
+        img.onload = function(){
+          drawingCtx.drawImage(img, 0, 0);
+        };
+        img.src = note.drawing;
+      }
+      
+      // 綁定工具按鈕
+      document.getElementById('drawPen').onclick = function(){
+        drawingTool = 'pen';
+        updateToolButtons();
+      };
+      document.getElementById('drawEraser').onclick = function(){
+        drawingTool = 'eraser';
+        updateToolButtons();
+      };
+      document.getElementById('drawColor').oninput = function(){
+        drawingColor = this.value;
+        drawingTool = 'pen';
+        updateToolButtons();
+      };
+      document.getElementById('drawClear').onclick = function(){
+        if (confirm('確定要清除整個畫布嗎？')){
+          drawingCtx.fillStyle = 'white';
+          drawingCtx.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+        }
+      };
+      document.getElementById('closeCanvas').onclick = function(){
+        toggleDrawingMode();
+      };
+      
+      // 綁定滑鼠事件
+      drawingCanvas.addEventListener('mousedown', startDrawing);
+      drawingCanvas.addEventListener('mousemove', draw);
+      drawingCanvas.addEventListener('mouseup', stopDrawing);
+      drawingCanvas.addEventListener('mouseout', stopDrawing);
+      
+      // 綁定觸控事件
+      drawingCanvas.addEventListener('touchstart', handleTouchStart);
+      drawingCanvas.addEventListener('touchmove', handleTouchMove);
+      drawingCanvas.addEventListener('touchend', stopDrawing);
+      
+      updateToolButtons();
+    }
+    
+    // 更新工具按鈕狀態
+    function updateToolButtons(){
+      var penBtn = document.getElementById('drawPen');
+      var eraserBtn = document.getElementById('drawEraser');
+      
+      if (drawingTool === 'pen'){
+        penBtn.style.background = 'var(--primary)';
+        penBtn.style.color = 'white';
+        eraserBtn.style.background = '';
+        eraserBtn.style.color = '';
+      } else {
+        penBtn.style.background = '';
+        penBtn.style.color = '';
+        eraserBtn.style.background = 'var(--primary)';
+        eraserBtn.style.color = 'white';
+      }
+    }
+    
+    // 開始繪圖
+    function startDrawing(e){
+      isDrawing = true;
+      var rect = drawingCanvas.getBoundingClientRect();
+      var scaleX = drawingCanvas.width / rect.width;
+      var scaleY = drawingCanvas.height / rect.height;
+      var x = (e.clientX - rect.left) * scaleX;
+      var y = (e.clientY - rect.top) * scaleY;
+      
+      drawingCtx.beginPath();
+      drawingCtx.moveTo(x, y);
+    }
+    
+    // 繪圖
+    function draw(e){
+      if (!isDrawing) return;
+      
+      var rect = drawingCanvas.getBoundingClientRect();
+      var scaleX = drawingCanvas.width / rect.width;
+      var scaleY = drawingCanvas.height / rect.height;
+      var x = (e.clientX - rect.left) * scaleX;
+      var y = (e.clientY - rect.top) * scaleY;
+      
+      if (drawingTool === 'pen'){
+        drawingCtx.strokeStyle = drawingColor;
+        drawingCtx.lineWidth = drawingSize;
+        drawingCtx.lineCap = 'round';
+        drawingCtx.lineJoin = 'round';
+      } else {
+        drawingCtx.strokeStyle = 'white';
+        drawingCtx.lineWidth = drawingSize * 2;
+        drawingCtx.lineCap = 'round';
+        drawingCtx.lineJoin = 'round';
+      }
+      
+      drawingCtx.lineTo(x, y);
+      drawingCtx.stroke();
+    }
+    
+    // 停止繪圖
+    function stopDrawing(){
+      if (isDrawing){
+        isDrawing = false;
+        drawingCtx.beginPath();
+        
+        // 繪圖結束後，延遲 5000ms 自動插入筆記
+        setTimeout(function(){
+          autoInsertDrawingToNote();
+        }, 5000);
+      }
+    }
+    
+    // 處理觸控開始
+    function handleTouchStart(e){
+      e.preventDefault();
+      var touch = e.touches[0];
+      var mouseEvent = new MouseEvent('mousedown', {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+      });
+      drawingCanvas.dispatchEvent(mouseEvent);
+    }
+    
+    // 處理觸控移動
+    function handleTouchMove(e){
+      e.preventDefault();
+      var touch = e.touches[0];
+      var mouseEvent = new MouseEvent('mousemove', {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+      });
+      drawingCanvas.dispatchEvent(mouseEvent);
+    }
+    
+    // 儲存手寫內容（保留舊功能）
+    function saveDrawing(){
+      if (!drawingCanvas) return;
+      
+      var notes = loadMyNotes();
+      var note = notes.find(function(n){ return n.id === currentEditingNoteId; });
+      if (!note) return;
+      
+      // 將 Canvas 轉換為 Base64 圖片
+      note.drawing = drawingCanvas.toDataURL('image/png');
+      note.modified = new Date().toISOString();
+      
+      saveMyNotes(notes);
+      
+      alert('手寫內容已儲存！');
+    }
+    
+    // 插入手寫內容到筆記文字欄
+    function insertDrawingToNote(){
+      if (!drawingCanvas) return;
+      
+      var textarea = document.getElementById('mnContent');
+      if (!textarea) return;
+      
+      // 將 Canvas 轉換為 Base64 圖片
+      var imageData = drawingCanvas.toDataURL('image/png');
+      
+      // 插入 HTML img 標籤到文字欄
+      var htmlImage = '\n<img src="' + imageData + '" alt="手寫內容" style="width:200px;height:200px;border:2px solid #999;border-radius:8px;margin:8px 0;display:block;" />\n';
+      
+      // 在游標位置插入
+      var start = textarea.selectionStart;
+      var end = textarea.selectionEnd;
+      var text = textarea.value;
+      textarea.value = text.substring(0, start) + htmlImage + text.substring(end);
+      
+      // 設定游標位置到插入內容之後
+      textarea.selectionStart = textarea.selectionEnd = start + htmlImage.length;
+      textarea.focus();
+      
+      // 清除畫布
+      drawingCtx.fillStyle = 'white';
+      drawingCtx.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+      
+      alert('手寫內容已插入筆記！');
+    }
+    
+    // 更新 HTML 預覽區域
+    function updatePreview(){
+      var textarea = document.getElementById('mnContent');
+      var preview = document.getElementById('mnPreview');
+      if (!textarea || !preview) return;
+      
+      // 將 textarea 的內容轉換為 HTML 顯示
+      var content = textarea.value;
+      if (!content){
+        preview.innerHTML = '<p style="color:#999; font-style:italic;">預覽區域（手寫圖片將在此顯示）</p>';
+      } else {
+        // 直接渲染 HTML 內容，不轉換換行符
+        // 這樣才能正確顯示 <img> 標籤
+        preview.innerHTML = content;
+      }
+    }
+    
+    // 自動插入手寫內容到筆記（無提示版）
+    function autoInsertDrawingToNote(){
+      if (!drawingCanvas) return;
+      
+      var textarea = document.getElementById('mnContent');
+      if (!textarea) return;
+      
+      // 檢查畫布是否為空白
+      var imageData = drawingCtx.getImageData(0, 0, drawingCanvas.width, drawingCanvas.height);
+      var pixels = imageData.data;
+      var isEmpty = true;
+      for (var i = 0; i < pixels.length; i += 4){
+        // 檢查是否有非白色像素
+        if (pixels[i] !== 255 || pixels[i+1] !== 255 || pixels[i+2] !== 255){
+          isEmpty = false;
+          break;
+        }
+      }
+      
+      // 如果畫布為空，不插入
+      if (isEmpty) return;
+      
+      // 將 Canvas 轉換為 Base64 圖片
+      var imageDataUrl = drawingCanvas.toDataURL('image/png');
+      
+      // 插入 HTML img 標籤到文字欄末尾
+      var htmlImage = '\n<img src="' + imageDataUrl + '" alt="手寫內容" style="width:200px;height:200px;border:2px solid #999;border-radius:8px;margin:8px 0;display:block;" />\n';
+      
+      // 在文字欄末尾插入
+      textarea.value += htmlImage;
+      
+      // 清除畫布
+      drawingCtx.fillStyle = 'white';
+      drawingCtx.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+      
+      // 更新預覽區域
+      updatePreview();
+    }
+    
+    // Init
     renderCalendar();
     var now = new Date();
     openNote(isoFromDate(now));
   })();
   </script>
+  
+  <!-- 手寫板浮動視窗 -->
+  <div id="floatingCanvas" class="floating-window">
+    <div class="floating-header" id="canvasHeader">
+      <button id="closeCanvas" style="margin-left:auto">×</button>
+    </div>
+    <div class="canvas-body">
+      <!-- 工具列移到畫布上方 -->
+      <div class="mini-toolbar" style="margin-bottom:0.5rem">
+        <button id="drawPen" class="mini-tool-btn active" title="畫筆">🖊️</button>
+        <button id="drawEraser" class="mini-tool-btn" title="橡皮擦">🧹</button>
+        <input type="color" id="drawColor" value="#000000" title="顏色" style="width:30px;height:30px;border:none;cursor:pointer" />
+        <button id="drawClear" class="mini-tool-btn" title="清除">🗑️</button>
+      </div>
+      <canvas id="miniCanvas" width="400" height="400"></canvas>
+    </div>
+  </div>
+  
 </body>
 </html>
